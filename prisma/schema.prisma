@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Permission {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  roles     Role[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  label       String
+  permissions Permission[]
+  users       User[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  roleId       String?
+  role         Role?     @relation(fields: [roleId], references: [id])
+  employee     Employee?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Employee {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  fullName    String
+  position    String
+  department  String?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  company   String?
+  source    String?
+  status    String   @default("NEW")
+  notes     String?
+  leads     Lead[]
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lead {
+  id         String   @id @default(cuid())
+  title      String
+  source     String?
+  status     String   @default("NEW")
+  value      Float    @default(0)
+  reasonLost String?
+  clientId   String?
+  client     Client?  @relation(fields: [clientId], references: [id])
+  orders     Order[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  status        String   @default("NEW")
+  total         Float    @default(0)
+  discount      Float    @default(0)
+  deposit       Float    @default(0)
+  paymentStatus String   @default("PENDING")
+  clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id])
+  leadId        String?
+  lead          Lead?    @relation(fields: [leadId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model InventoryItem {
+  id           String              @id @default(cuid())
+  sku          String              @unique
+  name         String
+  stock        Int                 @default(0)
+  reorderLevel Int                 @default(0)
+  unitPrice    Float               @default(0)
+  description  String?
+  movements    InventoryMovement[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model InventoryMovement {
+  id        String        @id @default(cuid())
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  type      String
+  quantity  Int
+  reason    String
+  createdAt DateTime      @default(now())
+}

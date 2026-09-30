@@ -1,69 +1,93 @@
-import Image from "next/image";
+import Link from 'next/link';
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="mx-auto max-w-6xl px-6 py-16">
+        <header className="flex items-center justify-between border-b border-slate-800 pb-6">
+          <div>
+            <p className="text-sm uppercase tracking-[0.28em] text-cyan-400">WatchFlow</p>
+            <h1 className="mt-2 text-3xl font-bold">Операционная система для часов</h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="rounded-full border border-cyan-500/60 px-4 py-2 text-sm font-medium text-cyan-300 transition hover:border-cyan-400 hover:bg-cyan-500/10"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Войти
+            </Link>
+            <Link
+              href="/admin"
+              className="rounded-full border border-cyan-500/60 px-4 py-2 text-sm font-medium text-cyan-300 transition hover:border-cyan-400 hover:bg-cyan-500/10"
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              Admin
+            </Link>
+            <Link
+              href="/dashboard"
+              className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+            >
+              Dashboard
+            </Link>
+          </div>
+        </header>
+
+        <section className="mt-14 grid gap-8 lg:grid-cols-[1.3fr_0.7fr] lg:items-center">
+          <div>
+            <p className="inline-flex rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-cyan-300">
+              Production & Sales OS
+            </p>
+            <h2 className="mt-6 max-w-xl text-5xl font-black leading-tight tracking-tight">
+              Все процессы — от лида до доставки — в одной системе.
+            </h2>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
+              CRM, производство, склад, логистика, маркетинг и KPI объединены в одном рабочем пространстве с ролями и проверками доступа.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link
+                href="/login"
+                className="rounded-full bg-cyan-500 px-6 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
+              >
+                Перейти в систему
+              </Link>
+              <Link
+                href="/admin"
+                className="rounded-full border border-cyan-500/60 px-6 py-3 font-semibold text-cyan-300 transition hover:border-cyan-400 hover:bg-cyan-500/10"
+              >
+                Admin Panel
+              </Link>
+              <Link
+                href="/dashboard"
+                className="rounded-full border border-slate-700 px-6 py-3 font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-900"
+              >
+                Dashboard
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40">
+            <div className="grid gap-4">
+              <div className="rounded-2xl bg-slate-950 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Продажи</p>
+                <p className="mt-2 text-3xl font-bold text-cyan-300">€84.2k</p>
+                <p className="mt-1 text-sm text-emerald-400">+12.4% vs. план</p>
+              </div>
+              <div className="rounded-2xl bg-slate-950 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Лиды</p>
+                <p className="mt-2 text-3xl font-bold text-violet-300">1,248</p>
+                <p className="mt-1 text-sm text-violet-200">+8 кампаний</p>
+              </div>
+              <div className="rounded-2xl bg-slate-950 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Производство</p>
+                <p className="mt-2 text-3xl font-bold text-amber-300">94%</p>
+                <p className="mt-1 text-sm text-amber-200">Срок соблюдается</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
   );
 }
