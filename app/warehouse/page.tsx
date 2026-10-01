@@ -1,7 +1,20 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getInventorySummary, getLowStockItems, productBOM, warehouseInventory } from '@/lib/inventory';
 
-export default function WarehousePage() {
+export default async function WarehousePage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'warehouse')) {
+    redirect('/dashboard');
+  }
+
   const lowStockItems = getLowStockItems(warehouseInventory);
   const summary = getInventorySummary(warehouseInventory);
 

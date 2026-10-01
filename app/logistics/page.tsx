@@ -1,7 +1,20 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getReadyForShipmentOrders, getShipmentSummary, LOGISTICS_STATUS_LABELS, LOGISTICS_STATUSES, readyShipments } from '@/lib/logistics';
 
-export default function LogisticsPage() {
+export default async function LogisticsPage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'logistics')) {
+    redirect('/dashboard');
+  }
+
   const summary = getShipmentSummary(readyShipments);
   const readyQueue = getReadyForShipmentOrders(readyShipments);
 

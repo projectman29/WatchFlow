@@ -1,11 +1,24 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { demoOrders } from '@/lib/demo-data';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
+import { getOrderByIdFromDb } from '@/lib/db-data';
 import { getOrderProgressPercent, getOrderStatusIndex, ORDER_STATUS_FLOW, ORDER_STATUS_LABELS } from '@/lib/orders';
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const order = demoOrders.find((item) => item.id === id);
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'orders')) {
+    redirect('/dashboard');
+  }
+
+  const order = await getOrderByIdFromDb(id, user);
 
   if (!order) {
     notFound();

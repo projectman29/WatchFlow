@@ -1,31 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ADMIN_ROLE_OPTIONS, DEMO_EMPLOYEES } from '@/lib/admin';
-import { employeeDirectory } from '@/lib/employees';
+import { ADMIN_ROLE_OPTIONS } from '@/lib/admin';
+import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
-
-async function getEmployees() {
-  if (!process.env.DATABASE_URL) {
-    return employeeDirectory;
-  }
-
-  try {
-    return employeeDirectory;
-  } catch {
-    return DEMO_EMPLOYEES.map((employee) => ({
-      ...employee,
-      name: employee.fullName,
-      department: (employee.department ?? 'Sales') as any,
-      role: (employee.role ?? 'sales') as any,
-      status: employee.isActive ? 'active' : 'inactive',
-    }));
-  }
-}
+import { getEmployeesFromDb } from '@/lib/db-data';
 
 export default async function EmployeesPage({
   searchParams,
 }: {
-  searchParams?: { editId?: string } | Promise<{ editId?: string }>;
+  searchParams?: { editId?: string; error?: string; success?: string } | Promise<{ editId?: string; error?: string; success?: string }>;
 }) {
   const user = await getCurrentUserFromCookies();
 
@@ -33,13 +16,35 @@ export default async function EmployeesPage({
     redirect('/login');
   }
 
-  if (user.role !== 'admin') {
+  if (!canAccessSection(user.role, 'admin')) {
     redirect('/dashboard');
   }
 
   const params = searchParams ? await searchParams : {};
   const editId = params?.editId ?? '';
-  const employees = await getEmployees();
+  const resultMessage = params.error
+    ? ({
+        invalid_form: 'Проверьте поля. Пароль должен содержать не менее 8 символов.',
+        email_in_use: 'Этот email уже используется другим аккаунтом.',
+        last_admin: 'Нельзя отключить или понизить последнего активного администратора.',
+        cannot_block_self: 'Нельзя заблокировать собственный аккаунт.',
+        cannot_remove_own_admin: 'Нельзя снять с себя роль admin или отключить собственный аккаунт.',
+        use_block_instead: 'Сотрудник не удалён. Заблокируйте аккаунт, чтобы сохранить историю и связи.',
+        employee_not_found: 'Сотрудник не найден.',
+        invalid_employee: 'Не указан сотрудник.',
+        save_failed: 'Не удалось сохранить изменения. Проверьте данные и повторите попытку.',
+        role_not_found: 'Роль не найдена. Сначала выполните заполнение справочника ролей.',
+        unknown_action: 'Неизвестное действие.',
+      } as Record<string, string>)[params.error] ?? 'Операция не выполнена.'
+    : params.success
+      ? ({
+          created: 'Сотрудник и аккаунт созданы.',
+          updated: 'Данные сотрудника сохранены.',
+          blocked: 'Аккаунт сотрудника заблокирован.',
+          unblocked: 'Аккаунт сотрудника разблокирован.',
+        } as Record<string, string>)[params.success] ?? 'Изменения сохранены.'
+      : '';
+  const employees = await getEmployeesFromDb();
   const editingEmployee = employees.find((employee) => employee.id === editId);
 
   return (
@@ -60,6 +65,12 @@ export default async function EmployeesPage({
             </Link>
           </div>
         </header>
+
+        {resultMessage ? (
+          <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${params.error ? 'border-rose-500/40 bg-rose-500/10 text-rose-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}>
+            {resultMessage}
+          </div>
+        ) : null}
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
@@ -98,13 +109,6 @@ export default async function EmployeesPage({
                         {employee.isActive ? 'Блокировать' : 'Разблокировать'}
                       </button>
                     </form>
-                    <form action="/api/admin/employees" method="POST">
-                      <input type="hidden" name="_action" value="delete" />
-                      <input type="hidden" name="employeeId" value={employee.id} />
-                      <button type="submit" className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-rose-300">
-                        Удалить
-                      </button>
-                    </form>
                   </div>
                 </div>
               ))}
@@ -125,6 +129,11 @@ export default async function EmployeesPage({
               <label className="block text-sm text-slate-300">
                 Email
                 <input type="email" name="email" required defaultValue={editingEmployee?.email ?? ''} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder="employee@watchflow.local" />
+              </label>
+
+              <label className="block text-sm text-slate-300">
+                {editingEmployee ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль для входа'}
+                <input type="password" name="password" required={!editingEmployee} minLength={8} maxLength={128} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder={editingEmployee ? 'Не менее 8 символов' : 'Создайте пароль, минимум 8 символов'} />
               </label>
 
               <label className="block text-sm text-slate-300">
@@ -166,6 +175,7 @@ export default async function EmployeesPage({
               <button type="submit" className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 hover:bg-cyan-400">
                 {editingEmployee ? 'Сохранить изменения' : 'Создать сотрудника'}
               </button>
+              {editingEmployee ? <Link href="/admin/employees" className="block text-center text-sm text-slate-400 hover:text-white">Отменить редактирование</Link> : null}
             </form>
           </div>
         </section>

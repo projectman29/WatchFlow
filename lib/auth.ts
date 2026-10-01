@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { prisma } from './prisma';
 
 export const SESSION_COOKIE = 'watchflow_session';
 
@@ -10,21 +11,33 @@ export type SessionUser = {
   role: string;
 };
 
+export function isEmployeeAccountActive(employee?: { isActive: boolean } | null): boolean {
+  return employee?.isActive === true;
+}
+
 const JWT_SECRET = process.env.JWT_SECRET ?? 'watchflow-dev-secret-change-me';
 
 export function authenticateDemoAdmin(email: string, password: string): SessionUser | null {
   const normalizedEmail = email.trim().toLowerCase();
 
-  if (normalizedEmail === 'admin@watchflow.local' && password === 'admin123') {
-    return {
-      id: 'demo-admin',
-      email: normalizedEmail,
-      name: 'Super Admin',
-      role: 'admin',
-    };
+  const demoUsers: Record<string, { password: string; name: string; role: string }> = {
+    'admin@watchflow.local': { password: 'admin123', name: 'Super Admin', role: 'admin' },
+    'manager@watchflow.local': { password: 'manager123', name: 'Марина Соколова', role: 'manager' },
+    'sales@watchflow.local': { password: 'sales123', name: 'Иван Петров', role: 'sales' },
+  };
+
+  const user = demoUsers[normalizedEmail];
+
+  if (!user || password !== user.password) {
+    return null;
   }
 
-  return null;
+  return {
+    id: `demo-${user.role}`,
+    email: normalizedEmail,
+    name: user.name,
+    role: user.role,
+  };
 }
 
 export function signSession(user: SessionUser): string {
@@ -54,7 +67,35 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
     return null;
   }
 
-  return verifySessionToken(token);
+  const sessionUser = verifySessionToken(token);
+
+  if (!sessionUser) {
+    return null;
+  }
+
+  if (!process.env.DATABASE_URL && sessionUser.id.startsWith('demo-')) {
+    return sessionUser;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      include: { role: true, employee: true },
+    });
+
+    if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role.name,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function setSessionCookie(response: Response, token: string): void {

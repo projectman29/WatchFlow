@@ -1,14 +1,31 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { canAccessSection, getAssignedEmployeeIds, normalizeRole } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 
-async function getDashboardSummary() {
+async function getDashboardSummary(user: { id: string; email: string; name: string; role: string }) {
+  const role = normalizeRole(user.role);
+  let scope: { managerId: { in: string[] } } | undefined;
+
+  if (role === 'manager' || role === 'sales') {
+    const employee = await prisma.employee.findFirst({
+      where: { user: { email: user.email } },
+      select: { id: true, subordinates: { select: { id: true } } },
+    }).catch(() => null);
+    const employeeIds = getAssignedEmployeeIds(
+      role,
+      employee?.id ?? null,
+      employee?.subordinates.map((subordinate) => subordinate.id) ?? [],
+    );
+    scope = { managerId: { in: employeeIds ?? [] } };
+  }
+
   if (!process.env.DATABASE_URL) {
     return {
-      leads: 18,
-      orders: 11,
-      clients: 27,
+      leads: role === 'sales' ? 3 : role === 'manager' ? 6 : 18,
+      orders: role === 'sales' ? 1 : role === 'manager' ? 3 : 11,
+      clients: role === 'sales' ? 3 : role === 'manager' ? 6 : 27,
       inventory: 128,
       revenue: 84200,
       conversion: 24,
@@ -18,9 +35,9 @@ async function getDashboardSummary() {
 
   try {
     const [leadCount, orderCount, clientCount, inventoryCount] = await Promise.all([
-      prisma.lead.count(),
-      prisma.order.count(),
-      prisma.client.count(),
+      prisma.lead.count({ where: scope }),
+      prisma.order.count({ where: scope }),
+      prisma.client.count({ where: scope ? { leads: { some: scope } } : undefined }),
       prisma.inventoryItem.count(),
     ]);
 
@@ -35,9 +52,9 @@ async function getDashboardSummary() {
     };
   } catch {
     return {
-      leads: 18,
-      orders: 11,
-      clients: 27,
+      leads: role === 'sales' ? 3 : role === 'manager' ? 6 : 18,
+      orders: role === 'sales' ? 1 : role === 'manager' ? 3 : 11,
+      clients: role === 'sales' ? 3 : role === 'manager' ? 6 : 27,
       inventory: 128,
       revenue: 84200,
       conversion: 24,
@@ -53,14 +70,33 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const summary = await getDashboardSummary();
+  const summary = await getDashboardSummary(user);
 
   const cards = [
-    { label: 'Лиды', value: summary.leads, accent: 'text-cyan-300' },
-    { label: 'Заказы', value: summary.orders, accent: 'text-violet-300' },
-    { label: 'Клиенты', value: summary.clients, accent: 'text-emerald-300' },
-    { label: 'Остаток', value: summary.inventory, accent: 'text-amber-300' },
+    ...(canAccessSection(user.role, 'leads') || canAccessSection(user.role, 'crm')
+      ? [{ label: 'Лиды', value: summary.leads, accent: 'text-cyan-300' }]
+      : []),
+    ...(canAccessSection(user.role, 'orders')
+      ? [{ label: 'Заказы', value: summary.orders, accent: 'text-violet-300' }]
+      : []),
+    ...(canAccessSection(user.role, 'crm')
+      ? [{ label: 'Клиенты', value: summary.clients, accent: 'text-emerald-300' }]
+      : []),
+    ...(canAccessSection(user.role, 'warehouse')
+      ? [{ label: 'Остаток', value: summary.inventory, accent: 'text-amber-300' }]
+      : []),
   ];
+
+  const quickLinks = [
+    { href: '/crm', label: canAccessSection(user.role, 'crm') ? 'CRM / Воронка' : 'Лиды', show: canAccessSection(user.role, 'crm') || canAccessSection(user.role, 'leads') },
+    { href: '/orders', label: 'Заказы', show: canAccessSection(user.role, 'orders') },
+    { href: '/design', label: 'Дизайн', show: canAccessSection(user.role, 'design') },
+    { href: '/production', label: 'Производство', show: canAccessSection(user.role, 'production') },
+    { href: '/warehouse', label: 'Склад', show: canAccessSection(user.role, 'warehouse') },
+    { href: '/logistics', label: 'Логистика', show: canAccessSection(user.role, 'logistics') },
+    { href: '/employees', label: 'Сотрудники', show: canAccessSection(user.role, 'employees') },
+    { href: '/admin', label: 'Admin Panel', show: canAccessSection(user.role, 'admin') },
+  ].filter((link) => link.show);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
@@ -98,35 +134,22 @@ export default async function DashboardPage() {
         </section>
 
         <section className="mt-8 flex flex-wrap gap-3">
-          {user.role === 'admin' ? (
-            <Link href="/admin" className="rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400">
-              Admin Panel
+          {quickLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                link.href === '/admin'
+                  ? 'bg-violet-500 text-white hover:bg-violet-400'
+                  : 'border border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500 hover:bg-slate-800'
+              }`}
+            >
+              {link.label}
             </Link>
-          ) : null}
-          <Link href="/crm" className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
-            CRM / Воронка
-          </Link>
-          <Link href="/orders" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Заказы
-          </Link>
-          <Link href="/design" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Дизайн
-          </Link>
-          <Link href="/production" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Производство
-          </Link>
-          <Link href="/warehouse" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Склад
-          </Link>
-          <Link href="/logistics" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Логистика
-          </Link>
-          <Link href="/employees" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
-            Сотрудники
-          </Link>
+          ))}
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        {canAccessSection(user.role, 'reports') ? <section className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Операционные показатели</h2>
@@ -175,7 +198,7 @@ export default async function DashboardPage() {
               <li className="flex items-center justify-between rounded-xl bg-slate-950 px-3 py-2"><span>Маркетинг</span><span className="text-amber-300">Готово</span></li>
             </ul>
           </div>
-        </section>
+        </section> : null}
 
         <div className="mt-8 flex items-center gap-4">
           <Link href="/" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 hover:bg-slate-900">

@@ -24,6 +24,15 @@ export type OrderStatus =
 
 export type LeadRecord = {
   id: string;
+  assignedToId?: string;
+  assignedToEmail?: string;
+  assignedTo?: string;
+  phone?: string;
+  whatsapp?: string;
+  instagram?: string;
+  city?: string;
+  notes?: string;
+  isDemo?: boolean;
   client: string;
   source: string;
   status: LeadStatus;
@@ -34,6 +43,7 @@ export type LeadRecord = {
 
 export type OrderRecord = {
   id: string;
+  assignedToEmail?: string;
   number: string;
   client: string;
   product: string;
@@ -61,6 +71,7 @@ export type OrderRecord = {
 export const demoLeads: LeadRecord[] = [
   {
     id: 'lead-1',
+    assignedToEmail: 'sales@watchflow.local',
     client: 'Анна Смирнова',
     source: 'Instagram',
     status: 'NEW',
@@ -69,6 +80,7 @@ export const demoLeads: LeadRecord[] = [
   },
   {
     id: 'lead-2',
+    assignedToEmail: 'manager@watchflow.local',
     client: 'Илья Кузнецов',
     source: 'Google Ads',
     status: 'CONTACTED',
@@ -77,6 +89,7 @@ export const demoLeads: LeadRecord[] = [
   },
   {
     id: 'lead-3',
+    assignedToEmail: 'sales@watchflow.local',
     client: 'Елена Павлова',
     source: 'Реферал',
     status: 'INTERESTED',
@@ -85,6 +98,7 @@ export const demoLeads: LeadRecord[] = [
   },
   {
     id: 'lead-4',
+    assignedToEmail: 'manager@watchflow.local',
     client: 'Дмитрий Лапин',
     source: 'Landing',
     status: 'WAITING_PAYMENT',
@@ -93,6 +107,7 @@ export const demoLeads: LeadRecord[] = [
   },
   {
     id: 'lead-5',
+    assignedToEmail: 'sales@watchflow.local',
     client: 'Мария Васильева',
     source: 'Instagram',
     status: 'WON',
@@ -101,6 +116,7 @@ export const demoLeads: LeadRecord[] = [
   },
   {
     id: 'lead-6',
+    assignedToEmail: 'manager@watchflow.local',
     client: 'Сергей Белов',
     source: 'VK',
     status: 'LOST',
@@ -113,6 +129,7 @@ export const demoLeads: LeadRecord[] = [
 export const demoOrders: OrderRecord[] = [
   {
     id: 'order-1001',
+    assignedToEmail: 'sales@watchflow.local',
     number: 'WF-1001',
     client: 'Мария Васильева',
     product: 'Classic Steel 42mm',
@@ -142,6 +159,7 @@ export const demoOrders: OrderRecord[] = [
   },
   {
     id: 'order-1002',
+    assignedToEmail: 'manager@watchflow.local',
     number: 'WF-1002',
     client: 'Андрей Котов',
     product: 'Titanium Chronograph',
@@ -170,6 +188,7 @@ export const demoOrders: OrderRecord[] = [
   },
   {
     id: 'order-1003',
+    assignedToEmail: 'manager@watchflow.local',
     number: 'WF-1003',
     client: 'Елизавета Кудряшова',
     product: 'Minimal Leather 38mm',

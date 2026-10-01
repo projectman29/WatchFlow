@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { authenticateDemoAdmin, setSessionCookie, signSession } from '@/lib/auth';
+import { authenticateDemoAdmin, isEmployeeAccountActive, setSessionCookie, signSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 const loginSchema = z.object({
@@ -24,28 +24,24 @@ export async function POST(request: Request) {
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
 
-    const demoUser = authenticateDemoAdmin(normalizedEmail, password);
-    if (demoUser) {
-      const response = NextResponse.json({
-        success: true,
-        user: demoUser,
-      });
+    if (!process.env.DATABASE_URL) {
+      const demoUser = authenticateDemoAdmin(normalizedEmail, password);
+      if (!demoUser) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
 
+      const response = NextResponse.json({ success: true, user: demoUser });
       setSessionCookie(response, signSession(demoUser));
       return response;
-    }
-
-    if (!process.env.DATABASE_URL) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
     try {
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
-        include: { role: true },
+        include: { role: true, employee: true },
       });
 
-      if (!user) {
+      if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
         return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
       }
 
@@ -74,20 +70,8 @@ export async function POST(request: Request) {
 
       return response;
     } catch (dbError) {
-      console.error('Database login failed, falling back to demo user only for admin credentials:', dbError);
-
-      const fallbackUser = authenticateDemoAdmin(normalizedEmail, password);
-      if (!fallbackUser) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-      }
-
-      const response = NextResponse.json({
-        success: true,
-        user: fallbackUser,
-      });
-
-      setSessionCookie(response, signSession(fallbackUser));
-      return response;
+      console.error('Database login failed:', dbError);
+      return NextResponse.json({ error: 'Unable to verify credentials right now.' }, { status: 503 });
     }
   } catch (error) {
     console.error('Login failed:', error);

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -27,28 +27,35 @@ model Role {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   name         String
   passwordHash String
   roleId       String?
-  role         Role?     @relation(fields: [roleId], references: [id])
+  role         Role?         @relation(fields: [roleId], references: [id])
   employee     Employee?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  activityLogs ActivityLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Employee {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id])
   fullName    String
   position    String
   department  String?
   phone       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean      @default(true)
+  managerId   String?
+  manager     Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates Employee[] @relation("EmployeeManager")
+  salesPlans  SalesPlan[]
+  leadAssignments Lead[]
+  orderAssignments Order[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model Client {
@@ -56,6 +63,9 @@ model Client {
   name      String
   email     String?
   phone     String?
+  whatsapp  String?
+  instagram String?
+  city      String?
   company   String?
   source    String?
   status    String   @default("NEW")
@@ -73,27 +83,49 @@ model Lead {
   status     String   @default("NEW")
   value      Float    @default(0)
   reasonLost String?
+  notes      String?
   clientId   String?
   client     Client?  @relation(fields: [clientId], references: [id])
+  managerId  String?
+  manager    Employee? @relation(fields: [managerId], references: [id])
   orders     Order[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
 model Order {
-  id            String   @id @default(cuid())
-  number        String   @unique
-  status        String   @default("NEW")
-  total         Float    @default(0)
-  discount      Float    @default(0)
-  deposit       Float    @default(0)
-  paymentStatus String   @default("PENDING")
+  id            String         @id @default(cuid())
+  number        String         @unique
+  status        String         @default("NEW")
+  total         Float          @default(0)
+  discount      Float          @default(0)
+  deposit       Float          @default(0)
+  paymentStatus String         @default("PENDING")
   clientId      String?
-  client        Client?  @relation(fields: [clientId], references: [id])
+  client        Client?        @relation(fields: [clientId], references: [id])
   leadId        String?
-  lead          Lead?    @relation(fields: [leadId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  lead          Lead?          @relation(fields: [leadId], references: [id])
+  managerId     String?
+  manager       Employee?      @relation(fields: [managerId], references: [id])
+  items         OrderItem[]
+  shipments     Shipment[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id])
+  productName String
+  quantity    Int     @default(1)
+  unitPrice   Float   @default(0)
+  model       String?
+  color       String?
+  strap       String?
+  engraving   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model InventoryItem {
@@ -117,4 +149,62 @@ model InventoryMovement {
   quantity  Int
   reason    String
   createdAt DateTime      @default(now())
+}
+
+model Shipment {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  trackingNumber String?
+  courierName    String?
+  status         String   @default("PREPARING")
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SalesPlan {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id])
+  month        String
+  targetAmount Float    @default(0)
+  actualAmount Float    @default(0)
+  bonusPercent Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, month])
+}
+
+model KpiRule {
+  id           String   @id @default(cuid())
+  name         String
+  minPercent   Float    @default(0)
+  maxPercent   Float    @default(0)
+  bonusPercent Float    @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

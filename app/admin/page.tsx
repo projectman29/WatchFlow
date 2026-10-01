@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 
 export default async function AdminPage() {
@@ -9,7 +10,7 @@ export default async function AdminPage() {
     redirect('/login');
   }
 
-  if (user.role !== 'admin') {
+  if (!canAccessSection(user.role, 'admin')) {
     redirect('/dashboard');
   }
 

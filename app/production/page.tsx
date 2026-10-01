@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
 import {
   getProductionStatusIndex,
   getProductionSummary,
@@ -7,7 +10,17 @@ import {
   PRODUCTION_STATUS_LABELS,
 } from '@/lib/production';
 
-export default function ProductionPage() {
+export default async function ProductionPage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'production')) {
+    redirect('/dashboard');
+  }
+
   const summary = getProductionSummary(productionQueue);
 
   return (

@@ -1,7 +1,20 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
 import { DESIGN_STATUSES, designQueue, getDesignSummary } from '@/lib/design';
 
-export default function DesignPage() {
+export default async function DesignPage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'design')) {
+    redirect('/dashboard');
+  }
+
   const summary = getDesignSummary(Array.from(designQueue) as unknown as Array<{ status: (typeof DESIGN_STATUSES)[number] }>);
 
   return (

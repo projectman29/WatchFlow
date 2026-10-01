@@ -1,8 +1,23 @@
 import Link from 'next/link';
-import { employeeDirectory, getEmployeeSummary } from '@/lib/employees';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
+import { getEmployeeSummary } from '@/lib/employees';
+import { getEmployeesFromDb } from '@/lib/db-data';
 
-export default function EmployeesPage() {
-  const summary = getEmployeeSummary(employeeDirectory);
+export default async function EmployeesPage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'employees')) {
+    redirect('/dashboard');
+  }
+
+  const employees = await getEmployeesFromDb();
+  const summary = getEmployeeSummary(employees);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
@@ -30,7 +45,7 @@ export default function EmployeesPage() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {employeeDirectory.map((employee) => (
+          {employees.map((employee) => (
             <article key={employee.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>

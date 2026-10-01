@@ -9,8 +9,33 @@ import {
   toggleEmployeeStatus,
   updateEmployee,
 } from './employees';
+import { isEmployeeAccountActive } from './auth';
+import { createEmployeeSchema, updateEmployeeSchema } from './employee-admin-validation';
 
 describe('employees module', () => {
+  it('allows only active employee accounts to pass the sign-in status check', () => {
+    expect(isEmployeeAccountActive({ isActive: true })).toBe(true);
+    expect(isEmployeeAccountActive({ isActive: false })).toBe(false);
+    expect(isEmployeeAccountActive(null)).toBe(false);
+  });
+
+  it('validates employee credentials and permits password changes to be optional on edit', () => {
+    const employee = {
+      name: 'Анна Сотрудник',
+      email: ' ANNA@EXAMPLE.COM ',
+      position: 'Менеджер',
+      department: 'Sales',
+      role: 'sales',
+      phone: '',
+    };
+
+    expect(createEmployeeSchema.safeParse({ ...employee, password: 'secret123' }).success).toBe(true);
+    expect(createEmployeeSchema.safeParse({ ...employee, password: 'short' }).success).toBe(false);
+    expect(updateEmployeeSchema.safeParse({ ...employee, password: '', isActive: true }).success).toBe(true);
+    expect(updateEmployeeSchema.safeParse({ ...employee, password: 'short', isActive: true }).success).toBe(false);
+    expect(createEmployeeSchema.parse({ ...employee, password: 'secret123' }).email).toBe('anna@example.com');
+  });
+
   it('exposes the required departments and roles', () => {
     expect(EMPLOYEE_ROLES).toContain('admin');
     expect(EMPLOYEE_ROLES).toContain('sales');

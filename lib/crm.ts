@@ -16,6 +16,28 @@ export const LEAD_SOURCES = [
   'Другое',
 ] as const;
 
+export const LEAD_LOSS_REASONS = [
+  'Дорого',
+  'Передумал',
+  'Не отвечает',
+  'Выбрал конкурента',
+  'Нет нужного товара',
+  'Другое',
+] as const;
+
+export const LEAD_STATUS_LABELS: Record<(typeof LEAD_STAGES)[number], string> = {
+  NEW: 'Новая заявка',
+  CONTACTED: 'Связались',
+  INTERESTED: 'Заинтересован',
+  WAITING_PAYMENT: 'Ожидает оплаты',
+  WON: 'Оплатил / заказ создан',
+  LOST: 'Отказ',
+};
+
+export function hasValidLeadLossReason(status: string, reason?: string | null): boolean {
+  return status !== 'LOST' || LEAD_LOSS_REASONS.some((candidate) => candidate === reason);
+}
+
 export const ORDER_STAGES = [
   'NEW',
   'IN_PRODUCTION',

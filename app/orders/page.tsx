@@ -1,8 +1,22 @@
 import Link from 'next/link';
-import { demoOrders } from '@/lib/demo-data';
+import { redirect } from 'next/navigation';
+import { canAccessSection } from '@/lib/access';
+import { getCurrentUserFromCookies } from '@/lib/auth';
+import { getOrdersFromDb } from '@/lib/db-data';
 import { ORDER_STATUS_LABELS } from '@/lib/orders';
 
-export default function OrdersPage() {
+export default async function OrdersPage() {
+  const user = await getCurrentUserFromCookies();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  if (!canAccessSection(user.role, 'orders')) {
+    redirect('/dashboard');
+  }
+
+  const orders = await getOrdersFromDb(user);
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
       <div className="mx-auto max-w-7xl">
@@ -23,9 +37,9 @@ export default function OrdersPage() {
         </header>
 
         <section className="mb-6 grid gap-4 md:grid-cols-4">
-          <StatBox label="Всего" value={demoOrders.length} accent="text-cyan-300" />
-          <StatBox label="В работе" value={demoOrders.filter((order) => order.status !== 'COMPLETED').length} accent="text-violet-300" />
-          <StatBox label="Доставлены" value={demoOrders.filter((order) => order.status === 'SHIPPED' || order.status === 'DELIVERED' || order.status === 'COMPLETED').length} accent="text-emerald-300" />
+          <StatBox label="Всего" value={orders.length} accent="text-cyan-300" />
+          <StatBox label="В работе" value={orders.filter((order) => order.status !== 'COMPLETED').length} accent="text-violet-300" />
+          <StatBox label="Доставлены" value={orders.filter((order) => order.status === 'SHIPPED' || order.status === 'DELIVERED' || order.status === 'COMPLETED').length} accent="text-emerald-300" />
           <StatBox label="План" value="€18.4k" accent="text-amber-300" />
         </section>
 
@@ -42,7 +56,7 @@ export default function OrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {demoOrders.map((order) => (
+              {orders.map((order) => (
                 <tr key={order.id} className="border-t border-slate-800 transition hover:bg-slate-800/70">
                   <td className="px-4 py-3 text-cyan-300">
                     <Link href={`/orders/${order.id}`} className="hover:text-cyan-200">{order.number}</Link>
