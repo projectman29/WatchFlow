@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: watchflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-watchflow}
+      POSTGRES_USER: ${POSTGRES_USER:-watchflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-watchflow_dev_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - watchflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-watchflow} -d ${POSTGRES_DB:-watchflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  watchflow-postgres-data:

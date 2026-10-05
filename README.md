@@ -1,3 +1,25 @@
+# WatchFlow
+
+## Локальная база данных PostgreSQL
+
+Локальная БД запускается через Docker Compose. Требуются установленный Docker Desktop с включённым Docker Compose и Node.js.
+
+1. Скопировать `.env.example` в `.env`.
+2. Запустить контейнер БД: `docker compose up -d postgres`.
+3. Установить зависимости: `npm install`.
+4. Сгенерировать Prisma Client: `npm run prisma:generate`.
+5. Применить текущую Prisma-схему к пустой локальной БД: `npm run prisma:push`.
+6. Загрузить начальные данные: `npm run db:seed`.
+7. Запустить приложение: `npm run dev`.
+
+`.env` содержит секреты и не должен попадать в Git. `.env.example` содержит только локальные значения для разработки; не использовать их в production.
+
+### Важно о прежней SQLite-базе
+
+Ранее использовавшаяся `prisma/dev.db` не удаляется и автоматически не переносится. Переключение на PostgreSQL создаёт отдельную базу; данные из SQLite нужно импортировать отдельно после проверки их состава. Для первоначального локального запуска используйте `prisma db push`, а не применение старой SQLite-миграции к PostgreSQL.
+
+## Оригинальная инструкция Next.js
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
