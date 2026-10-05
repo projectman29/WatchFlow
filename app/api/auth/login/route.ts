@@ -1,8 +1,6 @@
-import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { authenticateDemoAdmin, isEmployeeAccountActive, setSessionCookie, signSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { getLoginUser, parseLoginCredentials, setSessionCookie, signSession } from '@/lib/auth';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -11,67 +9,72 @@ const loginSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const parsed = loginSchema.safeParse(body);
+    let rawBody: unknown = null;
+    const contentType = request.headers.get('content-type') ?? '';
+    const acceptHeader = request.headers.get('accept') ?? '';
+    const isHtmlBrowserRequest =
+      contentType.includes('application/x-www-form-urlencoded') ||
+      contentType.includes('multipart/form-data') ||
+      acceptHeader.includes('text/html');
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Email and password are required.' },
-        { status: 400 },
-      );
+    if (contentType.includes('application/json')) {
+      rawBody = await request.json();
+    } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+      rawBody = await request.formData();
+    } else {
+      const rawText = await request.text();
+      if (rawText) {
+        try {
+          rawBody = JSON.parse(rawText);
+        } catch {
+          rawBody = new URLSearchParams(rawText);
+        }
+      }
+    }
+
+    const credentials = parseLoginCredentials(rawBody);
+    const parsed = credentials ? loginSchema.safeParse(credentials) : null;
+
+    const errorRedirect = (key: string) => {
+      if (!isHtmlBrowserRequest) {
+        return NextResponse.json({ error: key === 'missing_credentials' ? 'Email and password are required.' : 'Invalid credentials' }, { status: key === 'missing_credentials' ? 400 : 401 });
+      }
+
+      const redirectUrl = new URL('/login', request.url);
+      redirectUrl.searchParams.set('error', key);
+      return NextResponse.redirect(redirectUrl, 303);
+    };
+
+    if (!parsed || !parsed.success) {
+      return errorRedirect('missing_credentials');
     }
 
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!process.env.DATABASE_URL) {
-      const demoUser = authenticateDemoAdmin(normalizedEmail, password);
-      if (!demoUser) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-      }
-
-      const response = NextResponse.json({ success: true, user: demoUser });
-      setSessionCookie(response, signSession(demoUser));
-      return response;
-    }
-
     try {
-      const user = await prisma.user.findUnique({
-        where: { email: normalizedEmail },
-        include: { role: true, employee: true },
-      });
+      const user = await getLoginUser(normalizedEmail, password);
 
-      if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      if (!user) {
+        return errorRedirect('invalid_credentials');
       }
 
-      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-
-      if (!isValidPassword) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      if (isHtmlBrowserRequest) {
+        const response = NextResponse.redirect(new URL('/dashboard', request.url), 303);
+        setSessionCookie(response, signSession(user));
+        return response;
       }
 
       const response = NextResponse.json({
         success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role?.name ?? 'manager',
-        },
+        user,
       });
 
-      setSessionCookie(response, signSession({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role?.name ?? 'manager',
-      }));
-
+      setSessionCookie(response, signSession(user));
       return response;
-    } catch (dbError) {
-      console.error('Database login failed:', dbError);
-      return NextResponse.json({ error: 'Unable to verify credentials right now.' }, { status: 503 });
+    } catch (loginError) {
+      console.error('Login failed:', loginError);
+      return errorRedirect('invalid_credentials');
     }
   } catch (error) {
     console.error('Login failed:', error);

@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { prisma } from './prisma';
@@ -16,6 +17,46 @@ export function isEmployeeAccountActive(employee?: { isActive: boolean } | null)
 }
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'watchflow-dev-secret-change-me';
+
+export function parseLoginCredentials(input: unknown): { email: string; password: string } | null {
+  if (!input) {
+    return null;
+  }
+
+  if (input instanceof URLSearchParams) {
+    const email = input.get('email');
+    const password = input.get('password');
+
+    if (typeof email === 'string' && typeof password === 'string') {
+      return { email: email.trim(), password };
+    }
+
+    return null;
+  }
+
+  if (input instanceof FormData) {
+    const email = input.get('email');
+    const password = input.get('password');
+
+    if (typeof email === 'string' && typeof password === 'string') {
+      return { email: email.trim(), password };
+    }
+
+    return null;
+  }
+
+  if (typeof input === 'object' && input !== null) {
+    const record = input as Record<string, unknown>;
+    const email = record.email;
+    const password = record.password;
+
+    if (typeof email === 'string' && typeof password === 'string') {
+      return { email: email.trim(), password };
+    }
+  }
+
+  return null;
+}
 
 export function authenticateDemoAdmin(email: string, password: string): SessionUser | null {
   const normalizedEmail = email.trim().toLowerCase();
@@ -38,6 +79,44 @@ export function authenticateDemoAdmin(email: string, password: string): SessionU
     name: user.name,
     role: user.role,
   };
+}
+
+export async function getLoginUser(email: string, password: string): Promise<SessionUser | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const demoUser = authenticateDemoAdmin(normalizedEmail, password);
+  if (demoUser) {
+    return demoUser;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return null;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { role: true, employee: true },
+    });
+
+    if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
+      return null;
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    if (!isValidPassword) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role.name,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function signSession(user: SessionUser): string {
@@ -73,8 +152,12 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
     return null;
   }
 
-  if (!process.env.DATABASE_URL && sessionUser.id.startsWith('demo-')) {
+  if (sessionUser.id.startsWith('demo-')) {
     return sessionUser;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return null;
   }
 
   try {
@@ -99,15 +182,39 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
 }
 
 export function setSessionCookie(response: Response, token: string): void {
+  const cookieOptions = {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    maxAge: 7 * 24 * 60 * 60,
+    secure: process.env.NODE_ENV === 'production',
+  };
+
+  if ('cookies' in response && typeof response.cookies?.set === 'function') {
+    response.cookies.set(SESSION_COOKIE, token, cookieOptions);
+    return;
+  }
+
   response.headers.set(
     'Set-Cookie',
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60};`,
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${cookieOptions.maxAge};${cookieOptions.secure ? ' Secure;' : ''}`,
   );
 }
 
 export function clearSessionCookie(response: Response): void {
+  if ('cookies' in response && typeof response.cookies?.set === 'function') {
+    response.cookies.set(SESSION_COOKIE, '', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 0,
+      secure: process.env.NODE_ENV === 'production',
+    });
+    return;
+  }
+
   response.headers.set(
     'Set-Cookie',
-    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;`,
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;${process.env.NODE_ENV === 'production' ? ' Secure;' : ''}`,
   );
 }

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import {
+  getProductionQueueByPriority,
   getProductionStatusIndex,
   getProductionSummary,
   productionQueue,
@@ -22,6 +23,7 @@ export default async function ProductionPage() {
   }
 
   const summary = getProductionSummary(productionQueue);
+  const orderedTasks = getProductionQueueByPriority(productionQueue);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
@@ -42,28 +44,29 @@ export default async function ProductionPage() {
           </div>
         </header>
 
-        <section className="mb-8 grid gap-4 md:grid-cols-4">
+        <section className="mb-8 grid gap-4 md:grid-cols-5">
           <MetricCard label="Всего" value={summary.total} accent="text-cyan-300" />
           <MetricCard label="В работе" value={summary.inProgress} accent="text-violet-300" />
           <MetricCard label="Готовы" value={summary.ready} accent="text-emerald-300" />
           <MetricCard label="На доработке" value={summary.revision} accent="text-rose-300" />
+          <MetricCard label="Просрочено" value={summary.overdue} accent="text-amber-300" />
         </section>
 
         <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Сегодня необходимо изготовить</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">23 заказа</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-white">{summary.total} заказов</h2>
             </div>
             <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.15em] text-amber-300">
-              4 в очереди
+              {summary.overdue > 0 ? `${summary.overdue} просрочено` : 'Все в срок'}
             </span>
           </div>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-3 xl:grid-cols-6">
           {PRODUCTION_STATUSES.map((status) => {
-            const items = productionQueue.filter((task) => task.status === status);
+            const items = orderedTasks.filter((task) => task.status === status);
 
             return (
               <div key={status} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
@@ -89,6 +92,9 @@ export default async function ProductionPage() {
                         <p className="mt-2 text-sm text-slate-100">{task.client}</p>
                         <p className="mt-2 text-xs text-slate-400">Мастер: {task.master}</p>
                         <p className="mt-2 text-xs text-slate-400">Дедлайн: {task.deadline}</p>
+                        {task.deadline && new Date(`${task.deadline}T00:00:00`) < new Date() && task.status !== 'COMPLETED' && task.status !== 'READY_FOR_SHIPMENT' && task.status !== 'CANCELLED' ? (
+                          <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-amber-300">Просрочен</p>
+                        ) : null}
                         <div className="mt-3">
                           <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.12em] text-slate-400">
                             <span>Прогресс</span>

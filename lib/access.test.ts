@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { NextResponse } from 'next/server';
-import { authenticateDemoAdmin, clearSessionCookie } from './auth';
+import { authenticateDemoAdmin, clearSessionCookie, getLoginUser } from './auth';
 import { canAccessSection, filterDemoRecordsByOwner, getAssignedEmployeeIds, hasPermission, ROLE_PERMISSIONS } from './access';
 import { demoLeads } from './demo-data';
+import { getProtectedSectionForPath } from '../middleware';
 
 describe('RBAC access rules', () => {
   it('grants admin all dashboard permissions', () => {
@@ -91,6 +92,34 @@ describe('RBAC access rules', () => {
   it('allows demo manager and sales logins', () => {
     expect(authenticateDemoAdmin('manager@watchflow.local', 'manager123')?.role).toBe('manager');
     expect(authenticateDemoAdmin('sales@watchflow.local', 'sales123')?.role).toBe('sales');
+  });
+
+  it('falls back to demo credentials when the database user lookup is unavailable', async () => {
+    const user = await getLoginUser('admin@watchflow.local', 'admin123');
+
+    expect(user).not.toBeNull();
+    expect(user?.role).toBe('admin');
+    expect(user?.email).toBe('admin@watchflow.local');
+  });
+
+  it('maps ERP route prefixes to the correct protected section', () => {
+    expect(getProtectedSectionForPath('/dashboard')).toBe('dashboard');
+    expect(getProtectedSectionForPath('/dashboard/reports')).toBe('dashboard');
+    expect(getProtectedSectionForPath('/admin/employees')).toBe('admin');
+    expect(getProtectedSectionForPath('/crm/leads')).toBe('crm');
+    expect(getProtectedSectionForPath('/orders/123')).toBe('orders');
+    expect(getProtectedSectionForPath('/warehouse/stock')).toBe('warehouse');
+    expect(getProtectedSectionForPath('/employees/team')).toBe('employees');
+    expect(getProtectedSectionForPath('/unknown')).toBeNull();
+  });
+
+  it('restricts unauthorized roles from protected ERP routes', () => {
+    expect(canAccessSection('sales', 'crm')).toBe(false);
+    expect(canAccessSection('sales', 'orders')).toBe(true);
+    expect(canAccessSection('designer', 'production')).toBe(false);
+    expect(canAccessSection('warehouse', 'warehouse')).toBe(true);
+    expect(canAccessSection('manager', 'employees')).toBe(false);
+    expect(canAccessSection('admin', 'employees')).toBe(true);
   });
 
   it('clears the session cookie when logging out', () => {

@@ -1,43 +1,16 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError('');
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error ?? 'Login failed.');
-      }
-
-      router.push('/dashboard');
-      router.refresh();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Login failed.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  const searchParams = useSearchParams();
+  const errorKey = searchParams.get('error');
+  const errorMessage =
+    errorKey === 'missing_credentials'
+      ? 'Email and password are required.'
+      : errorKey === 'invalid_credentials'
+        ? 'Invalid credentials'
+        : '';
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white">
@@ -47,14 +20,13 @@ export default function LoginPage() {
           <h1 className="mt-3 text-3xl font-bold">Вход в систему</h1>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit} autoComplete="off">
+        <form className="space-y-5" action="/api/auth/login" method="POST" autoComplete="off">
           <label className="block text-sm text-slate-300">
             Email
             <input
+              name="email"
               type="email"
               autoComplete="off"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
               className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none ring-0 transition focus:border-cyan-400"
               required
             />
@@ -63,27 +35,25 @@ export default function LoginPage() {
           <label className="block text-sm text-slate-300">
             Пароль
             <input
+              name="password"
               type="password"
               autoComplete="off"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
               className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none ring-0 transition focus:border-cyan-400"
               required
             />
           </label>
 
-          {error ? (
+          {errorMessage ? (
             <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-              {error}
+              {errorMessage}
             </div>
           ) : null}
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
           >
-            {isSubmitting ? 'Входим...' : 'Войти'}
+            Войти
           </button>
         </form>
 

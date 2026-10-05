@@ -22,7 +22,20 @@ export const PRODUCTION_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Отменён',
 };
 
-export const productionQueue = [
+export type ProductionTask = {
+  id: string;
+  order: string;
+  client: string;
+  model: string;
+  master: string;
+  status: ProductionStatus;
+  progress: number;
+  deadline: string;
+  parts: string[];
+  note: string;
+};
+
+export const productionQueue: ProductionTask[] = [
   {
     id: 'prod-101',
     order: 'WF-1001',
@@ -83,7 +96,7 @@ export const productionQueue = [
     parts: ['CASE-006', 'MECH-004', 'STRAP-LEATHER-01'],
     note: 'Назначено на ближайший слот производства',
   },
-] as const;
+];
 
 export function getProductionStatusIndex(status: string): number {
   return PRODUCTION_STATUSES.indexOf(status as ProductionStatus);
@@ -96,11 +109,39 @@ export function getProductionProgressPercent(status: string): number {
   return Math.min(Math.round(((index + 1) / PRODUCTION_STATUSES.length) * 100), 100);
 }
 
-export function getProductionSummary(items: ReadonlyArray<{ status: ProductionStatus }>) {
+export function isProductionTaskOverdue(item: { status: ProductionStatus; deadline?: string }, referenceDate = new Date()): boolean {
+  if (!item.deadline) return false;
+  if (item.status === 'COMPLETED' || item.status === 'READY_FOR_SHIPMENT' || item.status === 'CANCELLED') return false;
+
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+
+  const deadline = new Date(`${item.deadline}T00:00:00`);
+  return deadline < today;
+}
+
+export function getProductionQueueByPriority(items: ReadonlyArray<ProductionTask>) {
+  return [...items].sort((a, b) => {
+    const overdueDiff = Number(isProductionTaskOverdue(b)) - Number(isProductionTaskOverdue(a));
+    if (overdueDiff !== 0) return overdueDiff;
+
+    const statusDiff = getProductionStatusIndex(a.status) - getProductionStatusIndex(b.status);
+    if (statusDiff !== 0) return statusDiff;
+
+    const deadlineA = a.deadline ? new Date(`${a.deadline}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER;
+    const deadlineB = b.deadline ? new Date(`${b.deadline}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER;
+    return deadlineA - deadlineB;
+  });
+}
+
+export function getProductionSummary(items: ReadonlyArray<{ status: ProductionStatus; deadline?: string }>) {
+  const overdue = items.filter((item) => isProductionTaskOverdue(item)).length;
+
   return {
     total: items.length,
     inProgress: items.filter((item) => item.status === 'IN_PROGRESS' || item.status === 'QUALITY_CONTROL').length,
     ready: items.filter((item) => item.status === 'READY_FOR_PACKING' || item.status === 'READY_FOR_SHIPMENT' || item.status === 'COMPLETED').length,
     revision: items.filter((item) => item.status === 'REVISION').length,
+    overdue,
   };
 }

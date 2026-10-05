@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canAccessSection } from '@/lib/access';
+import { canAccessSection } from './lib/access';
+
+const PROTECTED_ROUTES: Array<[string, string]> = [
+  ['/admin', 'admin'],
+  ['/dashboard', 'dashboard'],
+  ['/crm', 'crm'],
+  ['/orders', 'orders'],
+  ['/warehouse', 'warehouse'],
+  ['/production', 'production'],
+  ['/design', 'design'],
+  ['/logistics', 'logistics'],
+  ['/employees', 'employees'],
+  ['/reports', 'reports'],
+];
 
 function decodeJwtPayload(token: string): { role?: string } | null {
   try {
@@ -21,30 +34,51 @@ function decodeJwtPayload(token: string): { role?: string } | null {
   }
 }
 
-export function middleware(request: NextRequest) {
-  const token = request.cookies.get('watchflow_session')?.value;
-  const pathname = request.nextUrl.pathname;
-  const isDashboardRoute = pathname.startsWith('/dashboard');
-  const isAdminRoute = pathname.startsWith('/admin');
-  if (!token && (isDashboardRoute || isAdminRoute)) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
+export function getProtectedSectionForPath(pathname: string): string | null {
+  const normalized = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 
-  if (token && isAdminRoute) {
-    const payload = decodeJwtPayload(token);
-
-    if (!payload?.role || !canAccessSection(payload.role, 'admin')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+  for (const [prefix, section] of PROTECTED_ROUTES) {
+    if (normalized === prefix || normalized.startsWith(`${prefix}/`)) {
+      return section;
     }
   }
 
-  if (isDashboardRoute && !token) {
+  return null;
+}
+
+export function middleware(request: NextRequest) {
+  const token = request.cookies.get('watchflow_session')?.value;
+  const pathname = request.nextUrl.pathname;
+  const protectedSection = getProtectedSectionForPath(pathname);
+
+  if (!protectedSection) {
+    return NextResponse.next();
+  }
+
+  if (!token) {
     return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  const payload = decodeJwtPayload(token);
+
+  if (!payload?.role || !canAccessSection(payload.role, protectedSection)) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/admin/:path*',
+    '/crm/:path*',
+    '/orders/:path*',
+    '/warehouse/:path*',
+    '/production/:path*',
+    '/design/:path*',
+    '/logistics/:path*',
+    '/employees/:path*',
+    '/reports/:path*',
+  ],
 };
