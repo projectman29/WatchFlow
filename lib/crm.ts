@@ -34,8 +34,23 @@ export const LEAD_STATUS_LABELS: Record<(typeof LEAD_STAGES)[number], string> = 
   LOST: 'Отказ',
 };
 
+export function normalizeOptionalString(value: FormDataEntryValue | string | null | undefined): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const normalized = typeof value === 'string' ? value : String(value);
+  const trimmed = normalized.trim();
+
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export function hasValidLeadLossReason(status: string, reason?: string | null): boolean {
   return status !== 'LOST' || LEAD_LOSS_REASONS.some((candidate) => candidate === reason);
+}
+
+export function shouldCreateOrderForStatus(status: string, previousStatus?: string | null): boolean {
+  return status === 'WON' && previousStatus !== 'WON';
 }
 
 export const ORDER_STAGES = [

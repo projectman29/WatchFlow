@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { getLeadSourceSummary, getPipelineSummary, hasValidLeadLossReason, LEAD_LOSS_REASONS, LEAD_STAGES, orderByStage } from './crm';
+import {
+  getLeadSourceSummary,
+  getPipelineSummary,
+  hasValidLeadLossReason,
+  LEAD_LOSS_REASONS,
+  LEAD_STAGES,
+  normalizeOptionalString,
+  orderByStage,
+  shouldCreateOrderForStatus,
+} from './crm';
 
 describe('CRM pipeline', () => {
   it('requires one of the configured reasons when a lead is lost', () => {
@@ -14,6 +23,18 @@ describe('CRM pipeline', () => {
     expect(hasValidLeadLossReason('LOST')).toBe(false);
     expect(hasValidLeadLossReason('LOST', 'Дорого')).toBe(true);
     expect(hasValidLeadLossReason('NEW')).toBe(true);
+  });
+
+  it('normalizes empty form values before validation', () => {
+    expect(normalizeOptionalString(null)).toBeUndefined();
+    expect(normalizeOptionalString('')).toBeUndefined();
+    expect(normalizeOptionalString('  Дорого  ')).toBe('Дорого');
+  });
+
+  it('creates an order only when a lead becomes won for the first time', () => {
+    expect(shouldCreateOrderForStatus('WON', 'WAITING_PAYMENT')).toBe(true);
+    expect(shouldCreateOrderForStatus('WON', 'WON')).toBe(false);
+    expect(shouldCreateOrderForStatus('LOST', 'WAITING_PAYMENT')).toBe(false);
   });
 
   it('orders lead stages in the expected sales funnel', () => {

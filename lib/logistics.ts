@@ -11,6 +11,8 @@ export const LOGISTICS_STATUS_LABELS: Record<string, string> = {
 
 export type ReadyShipment = {
   id: string;
+  orderId?: string;
+  persisted?: boolean;
   order: string;
   client: string;
   phone: string;
@@ -95,6 +97,12 @@ export const readyShipments: ReadyShipment[] = [
 
 export function getLogisticsStatusIndex(status: string): number {
   return LOGISTICS_STATUSES.indexOf(status as LogisticsStatus);
+}
+
+export function canTransitionShipmentStatus(current: string, next: LogisticsStatus): boolean {
+  if (next === 'SHIPPED') return current === 'READY_FOR_SHIPMENT';
+  if (next === 'DELIVERED' || next === 'RETURNED') return current === 'SHIPPED';
+  return false;
 }
 
 export function getReadyForShipmentOrders(items: ReadonlyArray<ReadyShipment>) {

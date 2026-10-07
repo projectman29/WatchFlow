@@ -24,6 +24,11 @@ export function authenticateDemoAdmin(email: string, password: string): SessionU
     'admin@watchflow.local': { password: 'admin123', name: 'Super Admin', role: 'admin' },
     'manager@watchflow.local': { password: 'manager123', name: 'Марина Соколова', role: 'manager' },
     'sales@watchflow.local': { password: 'sales123', name: 'Иван Петров', role: 'sales' },
+    'designer@watchflow.local': { password: 'designer123', name: 'Ольга Дизайнер', role: 'designer' },
+    'master@watchflow.local': { password: 'master123', name: 'Игорь Мастер', role: 'master' },
+    'warehouse@watchflow.local': { password: 'warehouse123', name: 'Сергей Склад', role: 'warehouse' },
+    'logistics@watchflow.local': { password: 'logistics123', name: 'Алина Логистика', role: 'logistics' },
+    'marketing@watchflow.local': { password: 'marketing123', name: 'Анна Маркетинг', role: 'marketing' },
   };
 
   const user = demoUsers[normalizedEmail];
@@ -73,7 +78,7 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
     return null;
   }
 
-  if (!process.env.DATABASE_URL && sessionUser.id.startsWith('demo-')) {
+  if (sessionUser.id.startsWith('demo-')) {
     return sessionUser;
   }
 

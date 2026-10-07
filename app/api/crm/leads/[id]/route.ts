@@ -4,7 +4,14 @@ import { hasPermission } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getLeadAssignees, getRecordScope } from '@/lib/db-data';
 import { prisma } from '@/lib/prisma';
-import { hasValidLeadLossReason, LEAD_LOSS_REASONS, LEAD_SOURCES, LEAD_STAGES } from '@/lib/crm';
+import {
+  hasValidLeadLossReason,
+  LEAD_LOSS_REASONS,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  normalizeOptionalString,
+  shouldCreateOrderForStatus,
+} from '@/lib/crm';
 
 const updateLeadSchema = z.discriminatedUnion('action', [
   z.object({
@@ -43,18 +50,18 @@ export async function POST(
   const { id } = await params;
   const formData = await request.formData();
   const parsed = updateLeadSchema.safeParse({
-    action: formData.get('action'),
-    status: formData.get('status') ?? undefined,
-    reasonLost: formData.get('reasonLost') ?? undefined,
-    clientName: formData.get('clientName') ?? undefined,
-    phone: formData.get('phone') ?? undefined,
-    whatsapp: formData.get('whatsapp') ?? undefined,
-    instagram: formData.get('instagram') ?? undefined,
-    city: formData.get('city') ?? undefined,
-    source: formData.get('source') ?? undefined,
-    value: formData.get('value') ?? undefined,
-    notes: formData.get('notes') ?? undefined,
-    assignedToId: formData.get('assignedToId') ?? undefined,
+    action: normalizeOptionalString(formData.get('action')),
+    status: normalizeOptionalString(formData.get('status')),
+    reasonLost: normalizeOptionalString(formData.get('reasonLost')),
+    clientName: normalizeOptionalString(formData.get('clientName')),
+    phone: normalizeOptionalString(formData.get('phone')),
+    whatsapp: normalizeOptionalString(formData.get('whatsapp')),
+    instagram: normalizeOptionalString(formData.get('instagram')),
+    city: normalizeOptionalString(formData.get('city')),
+    source: normalizeOptionalString(formData.get('source')),
+    value: normalizeOptionalString(formData.get('value')),
+    notes: normalizeOptionalString(formData.get('notes')),
+    assignedToId: normalizeOptionalString(formData.get('assignedToId')),
   });
 
   if (!parsed.success) {
@@ -68,7 +75,14 @@ export async function POST(
   const scope = await getRecordScope(user);
   const existingLead = await prisma.lead.findFirst({
     where: { id, ...(scope ?? {}) },
-    select: { id: true, clientId: true },
+    select: {
+      id: true,
+      clientId: true,
+      managerId: true,
+      status: true,
+      value: true,
+      notes: true,
+    },
   });
 
   if (!existingLead) {
@@ -76,6 +90,8 @@ export async function POST(
   }
 
   if (parsed.data.action === 'status') {
+    const previousStatus = existingLead.status;
+
     await prisma.lead.update({
       where: { id: existingLead.id },
       data: {
@@ -83,6 +99,42 @@ export async function POST(
         reasonLost: parsed.data.status === 'LOST' ? parsed.data.reasonLost : null,
       },
     });
+
+    if (shouldCreateOrderForStatus(parsed.data.status, previousStatus)) {
+      const existingOrder = await prisma.order.findFirst({
+        where: { leadId: existingLead.id },
+        select: { id: true },
+      });
+
+      if (!existingOrder && existingLead.clientId) {
+        const orderCount = await prisma.order.count();
+        const orderNumber = `WF-${String(orderCount + 1001)}`;
+
+        await prisma.order.create({
+          data: {
+            number: orderNumber,
+            status: 'NEW',
+            total: Number(existingLead.value ?? 0),
+            paymentStatus: 'PAID',
+            client: { connect: { id: existingLead.clientId } },
+            lead: { connect: { id: existingLead.id } },
+            manager: existingLead.managerId ? { connect: { id: existingLead.managerId } } : undefined,
+            items: {
+              create: [{
+                productName: 'Custom Watch',
+                quantity: 1,
+                unitPrice: Number(existingLead.value ?? 0),
+                model: 'Custom',
+                color: 'Черный',
+                strap: 'Кожаный',
+                engraving: existingLead.notes ?? '',
+              }],
+            },
+          },
+        });
+      }
+    }
+
     return NextResponse.redirect(new URL('/crm?lead=updated', request.url), 303);
   }
 

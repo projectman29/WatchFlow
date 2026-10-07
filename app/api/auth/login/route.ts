@@ -24,15 +24,15 @@ export async function POST(request: Request) {
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!process.env.DATABASE_URL) {
-      const demoUser = authenticateDemoAdmin(normalizedEmail, password);
-      if (!demoUser) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-      }
-
+    const demoUser = authenticateDemoAdmin(normalizedEmail, password);
+    if (demoUser) {
       const response = NextResponse.json({ success: true, user: demoUser });
       setSessionCookie(response, signSession(demoUser));
       return response;
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
     try {

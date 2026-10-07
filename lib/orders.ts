@@ -43,3 +43,28 @@ export function getOrderProgressPercent(status: string): number {
   const percent = ((index + 1) / ORDER_STATUS_FLOW.length) * 100;
   return Math.round(percent);
 }
+
+const DESIGN_TRANSITIONS: Record<string, readonly string[]> = {
+  NEW: ['DESIGN_IN_PROGRESS'],
+  WAITING_DESIGN: ['DESIGN_IN_PROGRESS'],
+  DESIGN_IN_PROGRESS: ['WAITING_CLIENT_APPROVAL'],
+  WAITING_CLIENT_APPROVAL: ['DESIGN_APPROVED', 'DESIGN_IN_PROGRESS'],
+};
+
+const PRODUCTION_TRANSITIONS: Record<string, readonly string[]> = {
+  DESIGN_APPROVED: ['IN_PRODUCTION'],
+  WAITING_PRODUCTION: ['IN_PRODUCTION'],
+  IN_PRODUCTION: ['QUALITY_CONTROL'],
+  QUALITY_CONTROL: ['READY_FOR_PACKING', 'IN_PRODUCTION'],
+  READY_FOR_PACKING: ['READY_FOR_SHIPMENT'],
+};
+
+export function canTransitionOrderWorkflow(role: string, current: string, next: string): boolean {
+  const normalizedRole = role.trim().toLowerCase();
+  if (normalizedRole === 'admin') {
+    return [...(DESIGN_TRANSITIONS[current] ?? []), ...(PRODUCTION_TRANSITIONS[current] ?? [])].includes(next);
+  }
+  if (normalizedRole === 'designer') return DESIGN_TRANSITIONS[current]?.includes(next) ?? false;
+  if (normalizedRole === 'master') return PRODUCTION_TRANSITIONS[current]?.includes(next) ?? false;
+  return false;
+}

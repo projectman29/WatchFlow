@@ -93,6 +93,14 @@ describe('RBAC access rules', () => {
     expect(authenticateDemoAdmin('sales@watchflow.local', 'sales123')?.role).toBe('sales');
   });
 
+  it('allows every demo role login in the default demo environment', () => {
+    expect(authenticateDemoAdmin('designer@watchflow.local', 'designer123')?.role).toBe('designer');
+    expect(authenticateDemoAdmin('master@watchflow.local', 'master123')?.role).toBe('master');
+    expect(authenticateDemoAdmin('warehouse@watchflow.local', 'warehouse123')?.role).toBe('warehouse');
+    expect(authenticateDemoAdmin('logistics@watchflow.local', 'logistics123')?.role).toBe('logistics');
+    expect(authenticateDemoAdmin('marketing@watchflow.local', 'marketing123')?.role).toBe('marketing');
+  });
+
   it('clears the session cookie when logging out', () => {
     const response = NextResponse.redirect('http://localhost:3000/login');
     clearSessionCookie(response);

@@ -15,13 +15,17 @@ export default function LoginPage() {
     setError('');
     setIsSubmitting(true);
 
+    const formData = new FormData(event.currentTarget);
+    const nextEmail = String(formData.get('email') ?? '').trim();
+    const nextPassword = String(formData.get('password') ?? '');
+
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: nextEmail, password: nextPassword }),
       });
 
       const data = await response.json();
@@ -52,6 +56,7 @@ export default function LoginPage() {
             Email
             <input
               type="email"
+              name="email"
               autoComplete="off"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -64,6 +69,7 @@ export default function LoginPage() {
             Пароль
             <input
               type="password"
+              name="password"
               autoComplete="off"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -92,6 +98,11 @@ export default function LoginPage() {
           <p>admin@watchflow.local / admin123</p>
           <p>manager@watchflow.local / manager123</p>
           <p>sales@watchflow.local / sales123</p>
+          <p>designer@watchflow.local / designer123</p>
+          <p>master@watchflow.local / master123</p>
+          <p>warehouse@watchflow.local / warehouse123</p>
+          <p>logistics@watchflow.local / logistics123</p>
+          <p>marketing@watchflow.local / marketing123</p>
         </div>
       </div>
     </main>

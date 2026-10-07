@@ -2,9 +2,14 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
-import { getInventorySummary, getLowStockItems, productBOM, warehouseInventory } from '@/lib/inventory';
+import { prisma } from '@/lib/prisma';
+import { getInventorySummary, getLowStockItems, productBOM, warehouseInventory, type InventoryItem } from '@/lib/inventory';
 
-export default async function WarehousePage() {
+export default async function WarehousePage({
+  searchParams,
+}: {
+  searchParams?: { updated?: string } | Promise<{ updated?: string }>;
+}) {
   const user = await getCurrentUserFromCookies();
 
   if (!user) {
@@ -15,8 +20,30 @@ export default async function WarehousePage() {
     redirect('/dashboard');
   }
 
-  const lowStockItems = getLowStockItems(warehouseInventory);
-  const summary = getInventorySummary(warehouseInventory);
+  let inventory: InventoryItem[] = warehouseInventory;
+  let databaseAvailable = false;
+  try {
+    const records = await prisma.inventoryItem.findMany({ orderBy: { name: 'asc' } });
+    inventory = records.map((item) => ({
+      id: item.id,
+      sku: item.sku,
+      name: item.name,
+      category: 'consumable',
+      stock: item.stock,
+      reorderLevel: item.reorderLevel,
+      unitPrice: Number(item.unitPrice),
+      supplier: '',
+      location: 'Не указано',
+      description: item.description ?? undefined,
+    }));
+    databaseAvailable = true;
+  } catch (error) {
+    console.error('Unable to load inventory:', error);
+  }
+
+  const params = searchParams ? await searchParams : {};
+  const lowStockItems = getLowStockItems(inventory);
+  const summary = getInventorySummary(inventory);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
@@ -37,11 +64,14 @@ export default async function WarehousePage() {
           </div>
         </header>
 
+        {params.updated ? <p className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">Складская операция записана, остаток обновлён.</p> : null}
+        {!databaseAvailable ? <p className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">Показаны демонстрационные остатки: база недоступна, операции не сохраняются.</p> : null}
+
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           <MetricCard label="Всего единиц" value={summary.totalUnits} accent="text-cyan-300" />
           <MetricCard label="Низкий остаток" value={summary.lowStock} accent="text-amber-300" />
           <MetricCard label="Критично" value={summary.critical} accent="text-rose-300" />
-          <MetricCard label="Компонентов BOM" value={productBOM.length} accent="text-emerald-300" />
+          <MetricCard label="Позиций склада" value={inventory.length} accent="text-emerald-300" />
         </section>
 
         <section className="mb-8 grid gap-6 xl:grid-cols-[1fr_1.2fr]">
@@ -94,10 +124,11 @@ export default async function WarehousePage() {
                   <th className="px-4 py-3">Остаток</th>
                   <th className="px-4 py-3">Минимум</th>
                   <th className="px-4 py-3">Место</th>
+                  <th className="px-4 py-3">Операция</th>
                 </tr>
               </thead>
               <tbody>
-                {warehouseInventory.map((item) => (
+                {inventory.map((item) => (
                   <tr key={item.id} className="border-t border-slate-800">
                     <td className="px-4 py-3 text-cyan-300">{item.sku}</td>
                     <td className="px-4 py-3">{item.name}</td>
@@ -107,6 +138,15 @@ export default async function WarehousePage() {
                     </td>
                     <td className="px-4 py-3 text-slate-300">{item.reorderLevel}</td>
                     <td className="px-4 py-3 text-slate-300">{item.location}</td>
+                    <td className="px-4 py-3">
+                      {databaseAvailable ? <form className="flex min-w-[300px] gap-2" action="/api/warehouse/inventory" method="POST">
+                        <input type="hidden" name="itemId" value={item.id} />
+                        <select name="type" aria-label="Тип складской операции" className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white"><option value="INCOMING">Приход</option><option value="OUTGOING">Расход</option></select>
+                        <input name="quantity" type="number" min="1" required aria-label="Количество" placeholder="шт." className="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white" />
+                        <input name="reason" required minLength={3} maxLength={300} aria-label="Причина операции" placeholder="Причина" className="w-28 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white" />
+                        <button type="submit" className="rounded-lg bg-cyan-500 px-3 py-1 text-xs font-semibold text-slate-950">Сохранить</button>
+                      </form> : <span className="text-xs text-slate-500">Демо-режим</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
