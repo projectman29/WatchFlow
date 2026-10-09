@@ -1,14 +1,15 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { canAccessSection, hasPermission } from '@/lib/access';
-import { LEAD_LOSS_REASONS, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUS_LABELS, getLeadSourceSummary, getPipelineSummary } from '@/lib/crm';
+import { LEAD_SOURCES, getLeadSourceSummary, getPipelineSummary } from '@/lib/crm';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getCRMLeadsFromDb, getLeadAssignees, getOrdersFromDb } from '@/lib/db-data';
+import LeadsBoard from './leads-board';
 
 export default async function CRMPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ editLead?: string }>;
+  searchParams?: Promise<{ editLead?: string; leadError?: string; lead?: string; orderNumber?: string }>;
 }) {
   const user = await getCurrentUserFromCookies();
 
@@ -16,26 +17,22 @@ export default async function CRMPage({
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'crm') && !canAccessSection(user.role, 'leads')) {
+  if (!canAccessSection(user, 'crm') && !canAccessSection(user, 'leads')) {
     redirect('/dashboard');
   }
 
-  const canViewCrmAnalytics = canAccessSection(user.role, 'crm');
+  const canViewCrmAnalytics = canAccessSection(user, 'crm');
   const leads = await getCRMLeadsFromDb(user);
-  const orders = canAccessSection(user.role, 'orders') ? await getOrdersFromDb(user) : [];
+  const orders = canAccessSection(user, 'orders') ? await getOrdersFromDb(user) : [];
+  const activeOrders = orders.filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED');
   const assignees = await getLeadAssignees(user);
   const params = searchParams ? await searchParams : {};
   const editingLead = leads.find((lead) => lead.id === params.editLead && !lead.isDemo);
   const pipelineSummary = getPipelineSummary(leads);
   const sourceSummary = getLeadSourceSummary(leads);
-  const stageGroups = LEAD_STAGES.map((stage) => ({
-    stage,
-    leads: leads.filter((lead) => lead.status === stage),
-  }));
-
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
-      <div className="mx-auto max-w-7xl">
+    <main className="min-h-screen bg-slate-950 px-3 py-5 text-slate-50 sm:px-6 sm:py-8 2xl:px-8">
+      <div className="mx-auto w-full max-w-[1800px]">
         <header className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-cyan-400">CRM</p>
@@ -52,6 +49,29 @@ export default async function CRMPage({
           </div>
         </header>
 
+        {params.leadError ? (
+          <div role="alert" className="mb-6 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            {params.leadError === 'loss_reason_required'
+              ? 'Укажите причину отказа, чтобы перевести лид в статус «Отказ».'
+              : params.leadError === 'client_required'
+                ? 'Нельзя создать заказ: сначала заполните данные клиента в карточке лида.'
+                : params.leadError === 'order_creation_failed'
+                  ? 'Не удалось создать заказ. Статус лида не изменён; попробуйте ещё раз.'
+              : params.leadError === 'invalid_fields'
+                ? 'Не удалось сохранить изменения. Проверьте заполненные поля.'
+                : params.leadError === 'not_found'
+                  ? 'Лид не найден или у вас нет доступа к нему.'
+                  : params.leadError === 'invalid_assignee'
+                    ? 'Выберите доступного ответственного сотрудника.'
+                    : 'Не удалось выполнить действие с лидом. Обновите страницу и попробуйте снова.'}
+          </div>
+        ) : null}
+        {params.lead === 'order_created' ? (
+          <div role="status" className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            Заказ {params.orderNumber} создан и добавлен в раздел «Заказы».
+          </div>
+        ) : null}
+
         {canViewCrmAnalytics ? <section className="mb-8 grid gap-4 md:grid-cols-4">
           <MetricCard label="Всего лидов" value={pipelineSummary.total} accent="text-cyan-300" />
           <MetricCard label="В работе" value={pipelineSummary.inProgress} accent="text-violet-300" />
@@ -59,7 +79,7 @@ export default async function CRMPage({
           <MetricCard label="LOST" value={pipelineSummary.lost} accent="text-rose-300" />
         </section> : null}
 
-        {canViewCrmAnalytics || hasPermission(user.role, 'leads:write') ? <section className={`mb-8 grid gap-4 ${canViewCrmAnalytics ? 'xl:grid-cols-[1.1fr_0.9fr]' : ''}`}>
+        {canViewCrmAnalytics || hasPermission(user, 'leads:write') ? <section className={`mb-8 grid gap-4 ${canViewCrmAnalytics ? 'xl:grid-cols-[1.1fr_0.9fr]' : ''}`}>
           {canViewCrmAnalytics ? <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-semibold">Источники лидов</h2>
@@ -76,7 +96,7 @@ export default async function CRMPage({
             </div>
           </div> : null}
 
-          {hasPermission(user.role, 'leads:write') ? <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          {hasPermission(user, 'leads:write') ? <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <h2 className="text-xl font-semibold">{editingLead ? 'Изменить заявку' : 'Новая заявка'}</h2>
             <form className="mt-5 space-y-4" action={editingLead ? `/api/crm/leads/${editingLead.id}` : '/api/crm/leads'} method="POST">
               {editingLead ? <input type="hidden" name="action" value="edit" /> : null}
@@ -148,91 +168,12 @@ export default async function CRMPage({
           </div> : null}
         </section> : null}
 
-        <section className="grid gap-4 xl:grid-cols-6">
-          {stageGroups.map(({ stage, leads }) => (
-            <div key={stage} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-              <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
-                <span className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-300">{LEAD_STATUS_LABELS[stage]}</span>
-                <span className="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200">{leads.length}</span>
-              </div>
-
-              <div className="space-y-3">
-                {leads.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">
-                    Нет лидов
-                  </div>
-                ) : (
-                  leads.map((lead) => (
-                    <div key={lead.id} className="rounded-xl border border-slate-700 bg-slate-950 p-3">
-                      <p className="font-semibold text-white">{lead.client}</p>
-                      {lead.phone ? <p className="mt-1 text-xs text-slate-400">{lead.phone}</p> : null}
-                      {lead.whatsapp ? <p className="mt-1 text-xs text-slate-400">WhatsApp: {lead.whatsapp}</p> : null}
-                      {lead.instagram ? <p className="mt-1 text-xs text-slate-400">Instagram: {lead.instagram}</p> : null}
-                      {lead.city ? <p className="mt-1 text-xs text-slate-400">Город: {lead.city}</p> : null}
-                      {lead.assignedTo ? <p className="mt-1 text-xs text-slate-400">Ответственный: {lead.assignedTo}</p> : null}
-                      <p className="mt-1 text-xs uppercase tracking-[0.12em] text-slate-400">{lead.source}</p>
-                      <p className="mt-2 text-sm text-cyan-300">€{lead.value}</p>
-                      {lead.reasonLost ? (
-                        <p className="mt-2 text-xs text-rose-300">Причина: {lead.reasonLost}</p>
-                      ) : null}
-                      {lead.notes ? <p className="mt-2 text-xs text-slate-400">{lead.notes}</p> : null}
-                      {hasPermission(user.role, 'leads:write') && !lead.isDemo ? (
-                        <form className="mt-3 space-y-2 border-t border-slate-800 pt-3" action={`/api/crm/leads/${lead.id}`} method="POST">
-                          <input type="hidden" name="action" value="status" />
-                          <label className="block text-xs text-slate-400">
-                            Изменить статус
-                            <select name="status" defaultValue={lead.status} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white">
-                              {LEAD_STAGES.map((status) => <option key={status} value={status}>{LEAD_STATUS_LABELS[status]}</option>)}
-                            </select>
-                          </label>
-                          <label className="block text-xs text-slate-400">
-                            Причина отказа (обязательна для статуса «Отказ»)
-                            <select name="reasonLost" defaultValue={LEAD_LOSS_REASONS.includes(lead.reasonLost as (typeof LEAD_LOSS_REASONS)[number]) ? lead.reasonLost : ''} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white">
-                              <option value="">Выберите причину</option>
-                              {LEAD_LOSS_REASONS.map((reason) => <option key={reason} value={reason}>{reason}</option>)}
-                            </select>
-                          </label>
-                          <button type="submit" className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20">
-                            Сохранить статус
-                          </button>
-                        </form>
-                      ) : null}
-                      {hasPermission(user.role, 'leads:write') && !lead.isDemo ? (
-                        <Link href={`/crm?editLead=${encodeURIComponent(lead.id)}`} className="mt-2 block rounded-lg border border-slate-700 px-2 py-2 text-center text-xs text-slate-300 hover:border-cyan-500/50 hover:text-cyan-200">
-                          Редактировать карточку
-                        </Link>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
-        </section>
-
-        {canAccessSection(user.role, 'orders') ? <section className="mt-10 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Заказы в работе</h2>
-            <span className="text-sm text-slate-400">{orders.length} записей</span>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {orders.map((order) => (
-              <article key={order.id} className="rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-cyan-300">{order.number}</span>
-                  <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-300">
-                    {order.status}
-                  </span>
-                </div>
-                <p className="mt-3 text-lg font-semibold">{order.client}</p>
-                <p className="text-sm text-slate-400">{order.product}</p>
-                <p className="mt-2 text-xl font-bold text-emerald-300">€{order.total}</p>
-                <p className="mt-3 text-xs text-slate-400">Ответственный: {order.assignee}</p>
-              </article>
-            ))}
-          </div>
-        </section> : null}
+        <LeadsBoard
+          leads={leads}
+          orders={activeOrders}
+          canEdit={hasPermission(user, 'leads:write')}
+          canViewOrders={canAccessSection(user, 'orders')}
+        />
       </div>
     </main>
   );

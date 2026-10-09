@@ -1,10 +1,9 @@
-'use client';
-
-import { useSearchParams } from 'next/navigation';
-
-export default function LoginPage() {
-  const searchParams = useSearchParams();
-  const errorKey = searchParams.get('error');
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error: errorKey } = await searchParams;
   const errorMessage =
     errorKey === 'missing_credentials'
       ? 'Email and password are required.'
@@ -57,12 +56,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
-          <p>Демо-аккаунты:</p>
-          <p>admin@watchflow.local / admin123</p>
-          <p>manager@watchflow.local / manager123</p>
-          <p>sales@watchflow.local / sales123</p>
-        </div>
       </div>
     </main>
   );

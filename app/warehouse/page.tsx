@@ -11,7 +11,7 @@ export default async function WarehousePage() {
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'warehouse')) {
+  if (!canAccessSection(user, 'warehouse')) {
     redirect('/dashboard');
   }
 

@@ -19,6 +19,7 @@
 
 # production
 /build
+/var/design-files/
 
 # misc
 .DS_Store

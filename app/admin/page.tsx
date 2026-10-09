@@ -10,7 +10,7 @@ export default async function AdminPage() {
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'admin')) {
+  if (!canAccessSection(user, 'admin')) {
     redirect('/dashboard');
   }
 
@@ -34,8 +34,11 @@ export default async function AdminPage() {
             <Link href="/dashboard" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
               Dashboard
             </Link>
-            <Link href="/admin/employees" className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
+            <Link href="/admin/employees" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500 hover:bg-slate-800">
               Сотрудники
+            </Link>
+            <Link href="/admin/access" className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
+              Настройка доступа
             </Link>
           </div>
         </header>

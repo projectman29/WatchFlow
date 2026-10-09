@@ -48,6 +48,7 @@ export type OrderRecord = {
   client: string;
   product: string;
   total: number;
+  discount?: number;
   status: OrderStatus;
   assignee: string;
   createdAt: string;
@@ -65,7 +66,17 @@ export type OrderRecord = {
   designer: string;
   master: string;
   logistics: string;
-  history: Array<{ label: string; date: string; note: string }>;
+  items?: Array<{
+    id?: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    model?: string;
+    color?: string;
+    strap?: string;
+    engraving?: string;
+  }>;
+  history: Array<{ label: string; date: string; note: string; actor?: string }>;
 };
 
 export const demoLeads: LeadRecord[] = [
@@ -83,7 +94,7 @@ export const demoLeads: LeadRecord[] = [
     assignedToEmail: 'manager@watchflow.local',
     client: 'Илья Кузнецов',
     source: 'Google Ads',
-    status: 'CONTACTED',
+    status: 'INTERESTED',
     value: 1750,
     createdAt: '2026-09-20',
   },

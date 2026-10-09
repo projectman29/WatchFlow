@@ -11,7 +11,7 @@ export default async function LogisticsPage() {
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'logistics')) {
+  if (!canAccessSection(user, 'logistics')) {
     redirect('/dashboard');
   }
 

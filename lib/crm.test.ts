@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getLeadSourceSummary, getPipelineSummary, hasValidLeadLossReason, LEAD_LOSS_REASONS, LEAD_STAGES, orderByStage } from './crm';
+import { getLeadBoardStage, getLeadSourceSummary, getLeadStatusLabel, getPipelineSummary, hasValidLeadLossReason, LEAD_LOSS_REASONS, LEAD_STAGES, orderByStage } from './crm';
 
 describe('CRM pipeline', () => {
   it('requires one of the configured reasons when a lead is lost', () => {
@@ -19,31 +19,32 @@ describe('CRM pipeline', () => {
   it('orders lead stages in the expected sales funnel', () => {
     expect(LEAD_STAGES).toEqual([
       'NEW',
-      'CONTACTED',
       'INTERESTED',
       'WAITING_PAYMENT',
       'WON',
       'LOST',
     ]);
 
-    expect(orderByStage('WAITING_PAYMENT')).toBeGreaterThan(orderByStage('CONTACTED'));
+    expect(orderByStage('WAITING_PAYMENT')).toBeGreaterThan(orderByStage('INTERESTED'));
+    expect(orderByStage('CONTACTED')).toBe(orderByStage('INTERESTED'));
+    expect(getLeadBoardStage('CONTACTED')).toBe('INTERESTED');
+    expect(getLeadStatusLabel('CONTACTED')).toBe('Заинтересован');
     expect(orderByStage('LOST')).toBeGreaterThan(orderByStage('INTERESTED'));
   });
 
   it('calculates pipeline counts from leads', () => {
     const summary = getPipelineSummary([
       { status: 'NEW' },
-      { status: 'CONTACTED' },
       { status: 'INTERESTED' },
       { status: 'WAITING_PAYMENT' },
       { status: 'WON' },
       { status: 'LOST' },
     ]);
 
-    expect(summary.total).toBe(6);
+    expect(summary.total).toBe(5);
     expect(summary.won).toBe(1);
     expect(summary.lost).toBe(1);
-    expect(summary.inProgress).toBe(4);
+    expect(summary.inProgress).toBe(3);
   });
 
   it('groups leads by source for sales analysis', () => {

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { canAccessSection, getAssignedEmployeeIds, normalizeRole } from '@/lib/access';
+import { canAccessSection, getAssignedEmployeeIds, hasPermission, normalizeRole } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 
@@ -70,32 +70,44 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
+  if (!canAccessSection(user, 'dashboard')) {
+    redirect('/login?error=forbidden');
+  }
+
   const summary = await getDashboardSummary(user);
+  const notificationUser = user.id.startsWith('demo-')
+    ? await prisma.user.findUnique({ where: { email: user.email }, select: { id: true } })
+    : { id: user.id };
+  const unreadNotifications = notificationUser
+    ? await prisma.notification.count({ where: { userId: notificationUser.id, readAt: null } })
+    : 0;
 
   const cards = [
-    ...(canAccessSection(user.role, 'leads') || canAccessSection(user.role, 'crm')
+    ...(canAccessSection(user, 'leads') || canAccessSection(user, 'crm')
       ? [{ label: 'Лиды', value: summary.leads, accent: 'text-cyan-300' }]
       : []),
-    ...(canAccessSection(user.role, 'orders')
+    ...(canAccessSection(user, 'orders')
       ? [{ label: 'Заказы', value: summary.orders, accent: 'text-violet-300' }]
       : []),
-    ...(canAccessSection(user.role, 'crm')
+    ...(canAccessSection(user, 'crm')
       ? [{ label: 'Клиенты', value: summary.clients, accent: 'text-emerald-300' }]
       : []),
-    ...(canAccessSection(user.role, 'warehouse')
+    ...(canAccessSection(user, 'warehouse')
       ? [{ label: 'Остаток', value: summary.inventory, accent: 'text-amber-300' }]
       : []),
   ];
 
   const quickLinks = [
-    { href: '/crm', label: canAccessSection(user.role, 'crm') ? 'CRM / Воронка' : 'Лиды', show: canAccessSection(user.role, 'crm') || canAccessSection(user.role, 'leads') },
-    { href: '/orders', label: 'Заказы', show: canAccessSection(user.role, 'orders') },
-    { href: '/design', label: 'Дизайн', show: canAccessSection(user.role, 'design') },
-    { href: '/production', label: 'Производство', show: canAccessSection(user.role, 'production') },
-    { href: '/warehouse', label: 'Склад', show: canAccessSection(user.role, 'warehouse') },
-    { href: '/logistics', label: 'Логистика', show: canAccessSection(user.role, 'logistics') },
-    { href: '/employees', label: 'Сотрудники', show: canAccessSection(user.role, 'employees') },
-    { href: '/admin', label: 'Admin Panel', show: canAccessSection(user.role, 'admin') },
+    { href: '/search', label: 'Глобальный поиск', show: true },
+    { href: '/crm', label: canAccessSection(user, 'crm') ? 'CRM / Воронка' : 'Лиды', show: canAccessSection(user, 'crm') || canAccessSection(user, 'leads') },
+    { href: '/orders', label: 'Заказы', show: canAccessSection(user, 'orders') },
+    { href: '/design', label: 'Дизайн', show: canAccessSection(user, 'design') },
+    { href: '/production', label: 'Производство', show: canAccessSection(user, 'production') },
+    { href: '/warehouse', label: 'Склад', show: canAccessSection(user, 'warehouse') },
+    { href: '/logistics', label: 'Логистика', show: canAccessSection(user, 'logistics') },
+    { href: '/employees', label: 'Сотрудники', show: canAccessSection(user, 'employees') },
+    { href: '/audit', label: 'История и аудит', show: hasPermission(user, 'audit:read') },
+    { href: '/admin', label: 'Admin Panel', show: canAccessSection(user, 'admin') },
   ].filter((link) => link.show);
 
   return (
@@ -107,6 +119,24 @@ export default async function DashboardPage() {
             <h1 className="mt-2 text-3xl font-bold">Dashboard</h1>
           </div>
           <div className="flex items-center gap-3">
+            <form action="/search" method="GET" className="hidden items-center gap-2 sm:flex">
+              <label htmlFor="dashboard-search" className="sr-only">Глобальный поиск</label>
+              <input
+                id="dashboard-search"
+                name="q"
+                type="search"
+                minLength={2}
+                maxLength={100}
+                placeholder="Заказ, клиент, телефон, SKU…"
+                className="w-56 rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white placeholder:text-slate-500"
+              />
+              <button type="submit" className="rounded-full border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:border-cyan-500">
+                Найти
+              </button>
+            </form>
+            <Link href="/notifications" className="rounded-full border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:border-cyan-500">
+              Уведомления{unreadNotifications > 0 ? ` · ${unreadNotifications}` : ''}
+            </Link>
             <div className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-sm text-slate-300">
               {user.name}
             </div>
@@ -149,7 +179,7 @@ export default async function DashboardPage() {
           ))}
         </section>
 
-        {canAccessSection(user.role, 'reports') ? <section className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        {canAccessSection(user, 'reports') ? <section className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Операционные показатели</h2>

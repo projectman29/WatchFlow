@@ -27,35 +27,38 @@ model Role {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  name         String
-  passwordHash String
-  roleId       String?
-  role         Role?         @relation(fields: [roleId], references: [id])
-  employee     Employee?
-  activityLogs ActivityLog[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                  String         @id @default(cuid())
+  email               String         @unique
+  name                String
+  passwordHash        String
+  roleId              String?
+  role                Role?          @relation(fields: [roleId], references: [id])
+  employee            Employee?
+  activityLogs        ActivityLog[]
+  uploadedDesignFiles DesignFile[]   @relation("DesignFileUploader")
+  notifications       Notification[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 model Employee {
-  id          String       @id @default(cuid())
-  userId      String       @unique
-  user        User         @relation(fields: [userId], references: [id])
-  fullName    String
-  position    String
-  department  String?
-  phone       String?
-  isActive    Boolean      @default(true)
-  managerId   String?
-  manager     Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
-  subordinates Employee[] @relation("EmployeeManager")
-  salesPlans  SalesPlan[]
-  leadAssignments Lead[]
-  orderAssignments Order[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id])
+  fullName          String
+  position          String
+  department        String?
+  phone             String?
+  isActive          Boolean      @default(true)
+  managerId         String?
+  manager           Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
+  subordinates      Employee[]   @relation("EmployeeManager")
+  salesPlans        SalesPlan[]
+  leadAssignments   Lead[]
+  orderAssignments  Order[]
+  designAssignments DesignTask[] @relation("DesignTaskDesigner")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 model Client {
@@ -77,55 +80,87 @@ model Client {
 }
 
 model Lead {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   title      String
   source     String?
-  status     String   @default("NEW")
-  value      Float    @default(0)
+  status     String    @default("NEW")
+  value      Float     @default(0)
   reasonLost String?
   notes      String?
   clientId   String?
-  client     Client?  @relation(fields: [clientId], references: [id])
+  client     Client?   @relation(fields: [clientId], references: [id])
   managerId  String?
   manager    Employee? @relation(fields: [managerId], references: [id])
   orders     Order[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model Order {
-  id            String         @id @default(cuid())
-  number        String         @unique
-  status        String         @default("NEW")
-  total         Float          @default(0)
-  discount      Float          @default(0)
-  deposit       Float          @default(0)
-  paymentStatus String         @default("PENDING")
+  id            String      @id @default(cuid())
+  number        String      @unique
+  status        String      @default("NEW")
+  total         Float       @default(0)
+  discount      Float       @default(0)
+  deposit       Float       @default(0)
+  paymentStatus String      @default("PENDING")
   clientId      String?
-  client        Client?        @relation(fields: [clientId], references: [id])
+  client        Client?     @relation(fields: [clientId], references: [id])
   leadId        String?
-  lead          Lead?          @relation(fields: [leadId], references: [id])
+  lead          Lead?       @relation(fields: [leadId], references: [id])
   managerId     String?
-  manager       Employee?      @relation(fields: [managerId], references: [id])
+  manager       Employee?   @relation(fields: [managerId], references: [id])
   items         OrderItem[]
   shipments     Shipment[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  designTask    DesignTask?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   orderId     String
-  order       Order   @relation(fields: [orderId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id])
   productName String
-  quantity    Int     @default(1)
-  unitPrice   Float   @default(0)
+  quantity    Int      @default(1)
+  unitPrice   Float    @default(0)
   model       String?
   color       String?
   strap       String?
   engraving   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model DesignTask {
+  id                 String       @id @default(cuid())
+  orderId            String       @unique
+  order              Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status             String       @default("NEW")
+  revisionCount      Int          @default(0)
+  deadline           DateTime?
+  notes              String?
+  assignedDesignerId String?
+  assignedDesigner   Employee?    @relation("DesignTaskDesigner", fields: [assignedDesignerId], references: [id], onDelete: SetNull)
+  files              DesignFile[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+}
+
+model DesignFile {
+  id           String     @id @default(cuid())
+  taskId       String
+  task         DesignTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  storageKey   String     @unique
+  mimeType     String
+  size         Int
+  version      Int
+  uploadedById String?
+  uploadedBy   User?      @relation("DesignFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+
+  @@unique([taskId, version])
 }
 
 model InventoryItem {
@@ -152,16 +187,16 @@ model InventoryMovement {
 }
 
 model Shipment {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   orderId        String
-  order          Order    @relation(fields: [orderId], references: [id])
+  order          Order     @relation(fields: [orderId], references: [id])
   trackingNumber String?
   courierName    String?
-  status         String   @default("PREPARING")
+  status         String    @default("PREPARING")
   shippedAt      DateTime?
   deliveredAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model SalesPlan {
@@ -198,6 +233,20 @@ model ActivityLog {
   entityId  String?
   details   String?
   createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt, createdAt])
 }
 
 model SystemSetting {

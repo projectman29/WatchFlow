@@ -18,7 +18,7 @@ export default async function ProductionPage() {
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'production')) {
+  if (!canAccessSection(user, 'production')) {
     redirect('/dashboard');
   }
 

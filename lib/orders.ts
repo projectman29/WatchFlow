@@ -36,10 +36,30 @@ export function getOrderStatusIndex(status: string): number {
   return ORDER_STATUS_FLOW.indexOf(status as (typeof ORDER_STATUS_FLOW)[number]);
 }
 
+export function getAllowedOrderStatusTransitions(status: string): string[] {
+  if (status === 'CANCELLED' || status === 'COMPLETED') {
+    return [];
+  }
+
+  const currentIndex = getOrderStatusIndex(status);
+  const nextStatus = ORDER_STATUS_FLOW[currentIndex + 1];
+
+  return [
+    ...(nextStatus && nextStatus !== 'CANCELLED' ? [nextStatus] : []),
+    'CANCELLED',
+  ];
+}
+
+export function canTransitionOrderStatus(currentStatus: string, nextStatus: string): boolean {
+  return getAllowedOrderStatusTransitions(currentStatus).includes(nextStatus);
+}
+
 export function getOrderProgressPercent(status: string): number {
+  if (status === 'CANCELLED') return 0;
+
   const index = getOrderStatusIndex(status);
   if (index === -1) return 0;
 
-  const percent = ((index + 1) / ORDER_STATUS_FLOW.length) * 100;
+  const percent = ((index + 1) / (ORDER_STATUS_FLOW.length - 1)) * 100;
   return Math.round(percent);
 }

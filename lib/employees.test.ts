@@ -29,11 +29,11 @@ describe('employees module', () => {
       phone: '',
     };
 
-    expect(createEmployeeSchema.safeParse({ ...employee, password: 'secret123' }).success).toBe(true);
+    expect(createEmployeeSchema.safeParse({ ...employee, password: 'secret-pass-42' }).success).toBe(true);
     expect(createEmployeeSchema.safeParse({ ...employee, password: 'short' }).success).toBe(false);
     expect(updateEmployeeSchema.safeParse({ ...employee, password: '', isActive: true }).success).toBe(true);
     expect(updateEmployeeSchema.safeParse({ ...employee, password: 'short', isActive: true }).success).toBe(false);
-    expect(createEmployeeSchema.parse({ ...employee, password: 'secret123' }).email).toBe('anna@example.com');
+    expect(createEmployeeSchema.parse({ ...employee, password: 'secret-pass-42' }).email).toBe('anna@example.com');
   });
 
   it('exposes the required departments and roles', () => {

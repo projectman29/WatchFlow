@@ -4,6 +4,7 @@ import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getEmployeeSummary } from '@/lib/employees';
 import { getEmployeesFromDb } from '@/lib/db-data';
+import PasswordDisplay from './password-display';
 
 export default async function EmployeesPage() {
   const user = await getCurrentUserFromCookies();
@@ -12,7 +13,7 @@ export default async function EmployeesPage() {
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'employees')) {
+  if (!canAccessSection(user, 'employees')) {
     redirect('/dashboard');
   }
 
@@ -66,6 +67,14 @@ export default async function EmployeesPage() {
                 <InfoRow label="Роль" value={employee.role} />
                 <InfoRow label="Email" value={employee.email} />
                 <InfoRow label="Телефон" value={employee.phone} />
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2">
+                  <span className="text-xs uppercase tracking-[0.12em] text-slate-500">Пароль</span>
+                  <PasswordDisplay
+                    replaceHref={canAccessSection(user, 'admin')
+                      ? `/admin/employees?editId=${encodeURIComponent(employee.id)}`
+                      : undefined}
+                  />
+                </div>
               </div>
             </article>
           ))}

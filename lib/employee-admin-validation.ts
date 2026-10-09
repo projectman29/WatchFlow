@@ -11,11 +11,11 @@ const employeeFieldsSchema = z.object({
 });
 
 export const createEmployeeSchema = employeeFieldsSchema.extend({
-  password: z.string().min(8).max(128),
+  password: z.string().min(12).max(128),
 });
 
 export const updateEmployeeSchema = employeeFieldsSchema.extend({
-  password: z.union([z.literal(''), z.string().min(8).max(128)]).optional(),
+  password: z.union([z.literal(''), z.string().min(12).max(128)]).optional(),
   isActive: z.boolean(),
 });
 

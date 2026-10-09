@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canAccessSection } from './lib/access';
+import { isSameOriginMutation } from './lib/csrf';
 
 const PROTECTED_ROUTES: Array<[string, string]> = [
   ['/admin', 'admin'],
@@ -14,21 +14,50 @@ const PROTECTED_ROUTES: Array<[string, string]> = [
   ['/reports', 'reports'],
 ];
 
-function decodeJwtPayload(token: string): { role?: string } | null {
+function decodeBase64Url(value: string): ArrayBuffer | null {
   try {
-    const parts = token.split('.');
-    if (parts.length < 2) {
-      return null;
-    }
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const decoded = atob(padded);
+    const buffer = new ArrayBuffer(decoded.length);
+    new Uint8Array(buffer).set(Uint8Array.from(decoded, (character) => character.charCodeAt(0)));
+    return buffer;
+  } catch {
+    return null;
+  }
+}
 
-    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const normalized = payload.padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '=');
-    const decoded = atob(normalized);
-    const text = decodeURIComponent(
-      Array.from(decoded, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''),
+async function verifyJwtPayload(token: string): Promise<{ role: string } | null> {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || new TextEncoder().encode(secret).byteLength < 32) return null;
+
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const headerBytes = decodeBase64Url(parts[0]);
+  const payloadBytes = decodeBase64Url(parts[1]);
+  const signature = decodeBase64Url(parts[2]);
+  if (!headerBytes || !payloadBytes || !signature) return null;
+
+  try {
+    const header = JSON.parse(new TextDecoder().decode(headerBytes)) as { alg?: string };
+    const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as { role?: unknown };
+    if (header.alg !== 'HS256' || typeof payload.role !== 'string') return null;
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
     );
-
-    return JSON.parse(text) as { role?: string };
+    const isValid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      signature,
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+    );
+    return isValid ? { role: payload.role } : null;
   } catch {
     return null;
   }
@@ -46,7 +75,27 @@ export function getProtectedSectionForPath(pathname: string): string | null {
   return null;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  const maxBodySize = request.nextUrl.pathname.includes('/design/tasks/') && request.nextUrl.pathname.endsWith('/files')
+    ? 12 * 1024 * 1024
+    : 1024 * 1024;
+  if (contentLength > maxBodySize) {
+    return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+  }
+
+  if (
+    request.nextUrl.pathname.startsWith('/api/') &&
+    !isSameOriginMutation(
+      request.method,
+      request.nextUrl.origin,
+      request.headers.get('origin'),
+      request.headers.get('referer'),
+    )
+  ) {
+    return NextResponse.json({ error: 'Cross-origin request blocked.' }, { status: 403 });
+  }
+
   const token = request.cookies.get('watchflow_session')?.value;
   const pathname = request.nextUrl.pathname;
   const protectedSection = getProtectedSectionForPath(pathname);
@@ -59,17 +108,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const payload = decodeJwtPayload(token);
+  const payload = await verifyJwtPayload(token);
 
-  if (!payload?.role || !canAccessSection(payload.role, protectedSection)) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
+  if (!payload?.role) return NextResponse.redirect(new URL('/login', request.url));
 
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
+    '/api/:path*',
     '/dashboard/:path*',
     '/admin/:path*',
     '/crm/:path*',

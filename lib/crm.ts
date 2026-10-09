@@ -1,6 +1,5 @@
 export const LEAD_STAGES = [
   'NEW',
-  'CONTACTED',
   'INTERESTED',
   'WAITING_PAYMENT',
   'WON',
@@ -27,12 +26,21 @@ export const LEAD_LOSS_REASONS = [
 
 export const LEAD_STATUS_LABELS: Record<(typeof LEAD_STAGES)[number], string> = {
   NEW: 'Новая заявка',
-  CONTACTED: 'Связались',
   INTERESTED: 'Заинтересован',
   WAITING_PAYMENT: 'Ожидает оплаты',
   WON: 'Оплатил / заказ создан',
   LOST: 'Отказ',
 };
+
+export function getLeadStatusLabel(status: string): string {
+  if (status === 'CONTACTED') return LEAD_STATUS_LABELS.INTERESTED;
+  return LEAD_STATUS_LABELS[status as (typeof LEAD_STAGES)[number]] ?? status;
+}
+
+export function getLeadBoardStage(status: string): (typeof LEAD_STAGES)[number] | null {
+  if (status === 'CONTACTED') return 'INTERESTED';
+  return LEAD_STAGES.find((stage) => stage === status) ?? null;
+}
 
 export function hasValidLeadLossReason(status: string, reason?: string | null): boolean {
   return status !== 'LOST' || LEAD_LOSS_REASONS.some((candidate) => candidate === reason);
@@ -49,6 +57,7 @@ export const ORDER_STAGES = [
 ] as const;
 
 export function orderByStage(stage: string): number {
+  if (stage === 'CONTACTED') stage = 'INTERESTED';
   return LEAD_STAGES.indexOf(stage as (typeof LEAD_STAGES)[number]);
 }
 

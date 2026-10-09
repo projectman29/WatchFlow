@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getLoginUser, parseLoginCredentials, setSessionCookie, signSession } from '@/lib/auth';
+import { checkLoginRateLimit, clearLoginRateLimit } from '@/lib/login-rate-limit';
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().trim().email().max(254),
+  password: z.string().min(12).max(128),
 });
 
 export async function POST(request: Request) {
   try {
+    const contentLength = Number(request.headers.get('content-length') ?? 0);
+    if (contentLength > 8192) {
+      return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+    }
+
     let rawBody: unknown = null;
     const contentType = request.headers.get('content-type') ?? '';
     const acceptHeader = request.headers.get('accept') ?? '';
@@ -51,6 +57,12 @@ export async function POST(request: Request) {
 
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
+    const rateLimit = await checkLoginRateLimit(request, normalizedEmail);
+    if (!rateLimit.allowed) {
+      const response = errorRedirect('rate_limited');
+      response.headers.set('Retry-After', String(rateLimit.retryAfterSeconds));
+      return response;
+    }
 
     try {
       const user = await getLoginUser(normalizedEmail, password);
@@ -58,6 +70,8 @@ export async function POST(request: Request) {
       if (!user) {
         return errorRedirect('invalid_credentials');
       }
+
+      await clearLoginRateLimit(request, normalizedEmail);
 
       if (isHtmlBrowserRequest) {
         const response = NextResponse.redirect(new URL('/dashboard', request.url), 303);
@@ -74,10 +88,10 @@ export async function POST(request: Request) {
       return response;
     } catch (loginError) {
       console.error('Login failed:', loginError);
-      return errorRedirect('invalid_credentials');
+      return NextResponse.json({ error: 'Unable to authenticate right now.' }, { status: 503 });
     }
   } catch (error) {
     console.error('Login failed:', error);
-    return NextResponse.json({ error: 'Unable to login right now.' }, { status: 500 });
+    return NextResponse.json({ error: 'Unable to login right now.' }, { status: 503 });
   }
 }

@@ -22,6 +22,7 @@ const PERMISSION_KEYS = [
   'reports:read',
   'users:read',
   'users:write',
+  'audit:read',
   'leads:read',
   'leads:write',
 ];
@@ -37,7 +38,22 @@ const ROLE_CONFIG = [
   { name: 'marketing', label: 'Marketing' },
 ];
 
+function getSeedPassword(name: string): string {
+  const password = process.env[name];
+  if (!password || password.length < 12) {
+    throw new Error(`${name} must be set to a unique password of at least 12 characters before seeding.`);
+  }
+  return password;
+}
+
 async function main() {
+  const seedPasswords = {
+    admin: getSeedPassword('SEED_ADMIN_PASSWORD'),
+    manager: getSeedPassword('SEED_MANAGER_PASSWORD'),
+    sales: getSeedPassword('SEED_SALES_PASSWORD'),
+    designer: getSeedPassword('SEED_DESIGNER_PASSWORD'),
+  };
+
   for (const permission of PERMISSION_KEYS) {
     await prisma.permission.upsert({
       where: { key: permission },
@@ -51,9 +67,9 @@ async function main() {
       role.name === 'admin'
         ? PERMISSION_KEYS
         : role.name === 'manager'
-          ? ['dashboard:read', 'crm:read', 'crm:write', 'leads:read', 'leads:write', 'orders:read', 'orders:write', 'reports:read']
+          ? ['dashboard:read', 'crm:read', 'crm:write', 'leads:read', 'leads:write', 'orders:read', 'orders:write', 'reports:read', 'design:read']
           : role.name === 'sales'
-            ? ['dashboard:read', 'leads:read', 'leads:write', 'orders:read', 'orders:write']
+            ? ['dashboard:read', 'leads:read', 'leads:write', 'orders:read', 'orders:write', 'design:read']
             : role.name === 'designer'
               ? ['dashboard:read', 'design:read', 'design:write']
               : role.name === 'master'
@@ -68,10 +84,6 @@ async function main() {
       where: { name: role.name },
       update: {
         label: role.label,
-        permissions: {
-          set: [],
-          connect: permissionKeys.map((key) => ({ key })),
-        },
       },
       create: {
         name: role.name,
@@ -98,11 +110,11 @@ async function main() {
   const managerRole = await prisma.role.findUnique({ where: { name: 'manager' } });
   const salesRole = await prisma.role.findUnique({ where: { name: 'sales' } });
 
-  if (!adminRole || !managerRole || !salesRole) {
+  if (!adminRole || !managerRole || !salesRole || !designerRole) {
     throw new Error('Core roles were not created.');
   }
 
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash(seedPasswords.admin, 12);
 
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@watchflow.local' },
@@ -124,13 +136,13 @@ async function main() {
     where: { email: 'manager@watchflow.local' },
     update: {
       name: 'Марина Соколова',
-      passwordHash: await bcrypt.hash('manager123', 10),
+      passwordHash: await bcrypt.hash(seedPasswords.manager, 12),
       roleId: managerRole.id,
     },
     create: {
       email: 'manager@watchflow.local',
       name: 'Марина Соколова',
-      passwordHash: await bcrypt.hash('manager123', 10),
+      passwordHash: await bcrypt.hash(seedPasswords.manager, 12),
       roleId: managerRole.id,
     },
   });
@@ -139,14 +151,29 @@ async function main() {
     where: { email: 'sales@watchflow.local' },
     update: {
       name: 'Иван Петров',
-      passwordHash: await bcrypt.hash('sales123', 10),
+      passwordHash: await bcrypt.hash(seedPasswords.sales, 12),
       roleId: salesRole.id,
     },
     create: {
       email: 'sales@watchflow.local',
       name: 'Иван Петров',
-      passwordHash: await bcrypt.hash('sales123', 10),
+      passwordHash: await bcrypt.hash(seedPasswords.sales, 12),
       roleId: salesRole.id,
+    },
+  });
+
+  const designerUser = await prisma.user.upsert({
+    where: { email: 'designer@watchflow.local' },
+    update: {
+      name: 'Ольга Дизайнер',
+      passwordHash: await bcrypt.hash(seedPasswords.designer, 12),
+      roleId: designerRole.id,
+    },
+    create: {
+      email: 'designer@watchflow.local',
+      name: 'Ольга Дизайнер',
+      passwordHash: await bcrypt.hash(seedPasswords.designer, 12),
+      roleId: designerRole.id,
     },
   });
 
@@ -211,6 +238,27 @@ async function main() {
     },
   });
 
+  await prisma.employee.upsert({
+    where: { userId: designerUser.id },
+    update: {
+      fullName: 'Ольга Дизайнер',
+      position: 'Дизайнер',
+      department: 'Design',
+      phone: '+7 700 555 66 77',
+      isActive: true,
+      managerId: null,
+    },
+    create: {
+      userId: designerUser.id,
+      fullName: 'Ольга Дизайнер',
+      position: 'Дизайнер',
+      department: 'Design',
+      phone: '+7 700 555 66 77',
+      isActive: true,
+      managerId: null,
+    },
+  });
+
   const client1 = await prisma.client.upsert({
     where: { id: 'seed-client-1' },
     update: {
@@ -245,7 +293,7 @@ async function main() {
       phone: '+7 707 222 33 44',
       city: 'Нур-Султан',
       source: 'Meta Ads',
-      status: 'CONTACTED',
+      status: 'INTERESTED',
       notes: 'Проверка дизайна',
     },
     create: {
@@ -255,7 +303,7 @@ async function main() {
       phone: '+7 707 222 33 44',
       city: 'Нур-Султан',
       source: 'Meta Ads',
-      status: 'CONTACTED',
+      status: 'INTERESTED',
       notes: 'Проверка дизайна',
     },
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NextResponse } from 'next/server';
-import { authenticateDemoAdmin, clearSessionCookie, getLoginUser } from './auth';
+import { clearSessionCookie } from './auth';
 import { canAccessSection, filterDemoRecordsByOwner, getAssignedEmployeeIds, hasPermission, ROLE_PERMISSIONS } from './access';
 import { demoLeads } from './demo-data';
 import { getProtectedSectionForPath } from '../middleware';
@@ -21,6 +21,9 @@ describe('RBAC access rules', () => {
 
   it('defines default permissions per role', () => {
     expect(ROLE_PERMISSIONS.admin).toContain('dashboard:read');
+    expect(ROLE_PERMISSIONS.admin).toContain('audit:read');
+    expect(hasPermission('admin', 'audit:read')).toBe(true);
+    expect(hasPermission('sales', 'audit:read')).toBe(false);
     expect(ROLE_PERMISSIONS.manager).toContain('leads:read');
     expect(ROLE_PERMISSIONS.designer).toContain('design:read');
   });
@@ -43,6 +46,22 @@ describe('RBAC access rules', () => {
     expect(hasPermission('admin', 'leads:write')).toBe(true);
     expect(hasPermission('designer', 'leads:write')).toBe(false);
     expect(hasPermission('warehouse', 'leads:write')).toBe(false);
+  });
+
+  it('uses configured database permissions for an authenticated role', () => {
+    const sales = { role: 'sales', permissions: ['orders:read', 'warehouse:read'] };
+
+    expect(hasPermission(sales, 'orders:read')).toBe(true);
+    expect(hasPermission(sales, 'leads:write')).toBe(false);
+    expect(canAccessSection(sales, 'warehouse')).toBe(true);
+    expect(canAccessSection(sales, 'leads')).toBe(false);
+    expect(canAccessSection({ role: 'sales', permissions: [] }, 'orders')).toBe(false);
+    expect(canAccessSection({ role: 'sales', permissions: [] }, 'dashboard')).toBe(false);
+  });
+
+  it('keeps the admin area restricted to the administrator role', () => {
+    expect(canAccessSection({ role: 'sales', permissions: ['users:read', 'users:write'] }, 'admin')).toBe(false);
+    expect(canAccessSection({ role: 'admin', permissions: [] }, 'admin')).toBe(true);
   });
 
   it('defines distinct section access for every operational role', () => {
@@ -70,8 +89,8 @@ describe('RBAC access rules', () => {
   });
 
   it('shows demo fallback leads to the manager team but only owned leads to sales', () => {
-    const manager = authenticateDemoAdmin('manager@watchflow.local', 'manager123');
-    const sales = authenticateDemoAdmin('sales@watchflow.local', 'sales123');
+    const manager = { email: 'manager@watchflow.local', role: 'manager' };
+    const sales = { email: 'sales@watchflow.local', role: 'sales' };
 
     expect(filterDemoRecordsByOwner(demoLeads, manager)).toHaveLength(6);
     expect(filterDemoRecordsByOwner(demoLeads, sales).map((lead) => lead.id)).toEqual([
@@ -79,27 +98,6 @@ describe('RBAC access rules', () => {
       'lead-3',
       'lead-5',
     ]);
-  });
-
-  it('allows the demo admin login even when the database is unavailable', () => {
-    const user = authenticateDemoAdmin('admin@watchflow.local', 'admin123');
-
-    expect(user).not.toBeNull();
-    expect(user?.role).toBe('admin');
-    expect(user?.email).toBe('admin@watchflow.local');
-  });
-
-  it('allows demo manager and sales logins', () => {
-    expect(authenticateDemoAdmin('manager@watchflow.local', 'manager123')?.role).toBe('manager');
-    expect(authenticateDemoAdmin('sales@watchflow.local', 'sales123')?.role).toBe('sales');
-  });
-
-  it('falls back to demo credentials when the database user lookup is unavailable', async () => {
-    const user = await getLoginUser('admin@watchflow.local', 'admin123');
-
-    expect(user).not.toBeNull();
-    expect(user?.role).toBe('admin');
-    expect(user?.email).toBe('admin@watchflow.local');
   });
 
   it('maps ERP route prefixes to the correct protected section', () => {

@@ -18,6 +18,7 @@ export const ROLE_PERMISSIONS = {
     'reports:read',
     'users:read',
     'users:write',
+    'audit:read',
   ],
   manager: [
     'dashboard:read',
@@ -28,6 +29,7 @@ export const ROLE_PERMISSIONS = {
     'orders:read',
     'orders:write',
     'reports:read',
+    'design:read',
   ],
   sales: [
     'dashboard:read',
@@ -35,6 +37,7 @@ export const ROLE_PERMISSIONS = {
     'leads:write',
     'orders:read',
     'orders:write',
+    'design:read',
   ],
   designer: ['dashboard:read', 'design:read', 'design:write'],
   master: ['dashboard:read', 'production:read', 'production:write'],
@@ -44,6 +47,31 @@ export const ROLE_PERMISSIONS = {
 } as const;
 
 export type RoleName = keyof typeof ROLE_PERMISSIONS;
+export type AccessSubject = string | { role: string; permissions?: readonly string[] };
+
+export const PERMISSION_LABELS: Record<string, string> = {
+  'dashboard:read': 'Просмотр панели управления',
+  'crm:read': 'Просмотр CRM',
+  'crm:write': 'Изменение CRM',
+  'leads:read': 'Просмотр лидов',
+  'leads:write': 'Изменение лидов',
+  'orders:read': 'Просмотр заказов',
+  'orders:write': 'Изменение заказов',
+  'warehouse:read': 'Просмотр склада',
+  'warehouse:write': 'Изменение склада',
+  'marketing:read': 'Просмотр маркетинга',
+  'marketing:write': 'Изменение маркетинга',
+  'design:read': 'Просмотр дизайна',
+  'design:write': 'Управление дизайном',
+  'production:read': 'Просмотр производства',
+  'production:write': 'Управление производством',
+  'logistics:read': 'Просмотр логистики',
+  'logistics:write': 'Управление логистикой',
+  'reports:read': 'Просмотр отчетов',
+  'users:read': 'Просмотр сотрудников',
+  'users:write': 'Управление сотрудниками',
+  'audit:read': 'Просмотр истории и аудита',
+};
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {
   admin: ['users:read'],
@@ -65,21 +93,34 @@ export function normalizeRole(role?: string | null): string {
   return (role ?? '').trim().toLowerCase();
 }
 
-export function hasPermission(role: string, permission: string): boolean {
-  const normalizedRole = normalizeRole(role);
-  const permissions = Array.from(ROLE_PERMISSIONS[normalizedRole as RoleName] ?? []) as string[];
-  return normalizedRole === 'admin' || permissions.includes(permission) || permissions.includes('*');
+function getRole(subject: AccessSubject): string {
+  return typeof subject === 'string' ? subject : subject.role;
 }
 
-export function canAccessSection(role: string, section: string): boolean {
-  const normalizedRole = normalizeRole(role);
+function getPermissions(subject: AccessSubject): readonly string[] {
+  if (typeof subject !== 'string' && subject.permissions !== undefined) return subject.permissions;
+  return ROLE_PERMISSIONS[normalizeRole(getRole(subject)) as RoleName] ?? [];
+}
 
-  if (normalizedRole === 'admin') {
+export function hasPermission(subject: AccessSubject, permission: string): boolean {
+  const role = normalizeRole(getRole(subject));
+  const permissions = getPermissions(subject);
+  return role === 'admin' || permissions.includes(permission) || permissions.includes('*');
+}
+
+export function canAccessSection(subject: AccessSubject, section: string): boolean {
+  const role = normalizeRole(getRole(subject));
+
+  if (section === 'admin') {
+    return role === 'admin';
+  }
+
+  if (role === 'admin') {
     return true;
   }
 
   const allowedPermissions = SECTION_PERMISSIONS[section] ?? [];
-  return allowedPermissions.some((permission) => hasPermission(normalizedRole, permission));
+  return allowedPermissions.some((permission) => hasPermission(subject, permission));
 }
 
 export function hasAnyRole(role: string | null | undefined, allowedRoles: readonly string[]): boolean {

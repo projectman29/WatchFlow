@@ -4,6 +4,8 @@ import { ADMIN_ROLE_OPTIONS } from '@/lib/admin';
 import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getEmployeesFromDb } from '@/lib/db-data';
+import PasswordInput from './password-input';
+import PasswordDisplay from '../../employees/password-display';
 
 export default async function EmployeesPage({
   searchParams,
@@ -16,7 +18,7 @@ export default async function EmployeesPage({
     redirect('/login');
   }
 
-  if (!canAccessSection(user.role, 'admin')) {
+  if (!canAccessSection(user, 'admin')) {
     redirect('/dashboard');
   }
 
@@ -24,7 +26,7 @@ export default async function EmployeesPage({
   const editId = params?.editId ?? '';
   const resultMessage = params.error
     ? ({
-        invalid_form: 'Проверьте поля. Пароль должен содержать не менее 8 символов.',
+        invalid_form: 'Проверьте поля. Пароль должен содержать не менее 12 символов.',
         email_in_use: 'Этот email уже используется другим аккаунтом.',
         last_admin: 'Нельзя отключить или понизить последнего активного администратора.',
         cannot_block_self: 'Нельзя заблокировать собственный аккаунт.',
@@ -93,6 +95,10 @@ export default async function EmployeesPage({
                     <p>Телефон: {employee.phone}</p>
                     <p>Отдел: {employee.department}</p>
                     <p>Статус: {employee.isActive ? 'Активен' : 'Заблокирован'}</p>
+                    <div className="flex items-center justify-between gap-3 md:col-span-2">
+                      <span>Пароль:</span>
+                      <PasswordDisplay replaceHref={`/admin/employees?editId=${encodeURIComponent(employee.id)}`} />
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -133,7 +139,11 @@ export default async function EmployeesPage({
 
               <label className="block text-sm text-slate-300">
                 {editingEmployee ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль для входа'}
-                <input type="password" name="password" required={!editingEmployee} minLength={8} maxLength={128} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder={editingEmployee ? 'Не менее 8 символов' : 'Создайте пароль, минимум 8 символов'} />
+                <PasswordInput
+                  name="password"
+                  required={!editingEmployee}
+                  placeholder={editingEmployee ? 'Не менее 12 символов' : 'Создайте пароль, минимум 12 символов'}
+                />
               </label>
 
               <label className="block text-sm text-slate-300">

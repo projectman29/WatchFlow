@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { NextRequest, NextResponse } from 'next/server';
 import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
+import { createAuditEntry } from '@/lib/audit';
 import { createEmployeeSchema, updateEmployeeSchema } from '@/lib/employee-admin-validation';
 import { getEmployeesFromDb } from '@/lib/db-data';
 import { prisma } from '@/lib/prisma';
@@ -19,7 +20,7 @@ async function requireAdmin() {
     return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  if (!canAccessSection(user.role, 'admin')) {
+  if (!canAccessSection(user, 'admin')) {
     return { response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
@@ -68,9 +69,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await prisma.employee.update({
-        where: { id: employeeId },
-        data: { isActive: action === 'unblock' },
+      await prisma.$transaction(async (transaction) => {
+        await transaction.employee.update({
+          where: { id: employeeId },
+          data: { isActive: action === 'unblock' },
+        });
+        await createAuditEntry(transaction, {
+          userId: auth.user.id,
+          actor: auth.user.name,
+          action: action === 'block' ? 'EMPLOYEE_BLOCKED' : 'EMPLOYEE_UNBLOCKED',
+          entity: 'Employee',
+          entityId: employee.id,
+          details: {
+            email: employee.user.email,
+            old: { isActive: employee.isActive },
+            new: { isActive: action === 'unblock' },
+          },
+        });
       });
       return redirectWithResult(request, 'success', action === 'block' ? 'blocked' : 'unblocked');
     }
@@ -103,23 +118,43 @@ export async function POST(request: NextRequest) {
           })
         : null;
 
-      await prisma.user.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          passwordHash: await bcrypt.hash(data.password, 12),
-          role: { connect: { id: role.id } },
-          employee: {
-            create: {
-              fullName: data.name,
-              position: data.position,
-              department: data.department,
-              phone: data.phone || null,
-              isActive: true,
-              ...(salesManager ? { manager: { connect: { id: salesManager.id } } } : {}),
+      await prisma.$transaction(async (transaction) => {
+        const createdUser = await transaction.user.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            passwordHash: await bcrypt.hash(data.password, 12),
+            role: { connect: { id: role.id } },
+            employee: {
+              create: {
+                fullName: data.name,
+                position: data.position,
+                department: data.department,
+                phone: data.phone || null,
+                isActive: true,
+                ...(salesManager ? { manager: { connect: { id: salesManager.id } } } : {}),
+              },
             },
           },
-        },
+          include: { employee: true },
+        });
+        await createAuditEntry(transaction, {
+          userId: auth.user.id,
+          actor: auth.user.name,
+          action: 'EMPLOYEE_CREATED',
+          entity: 'Employee',
+          entityId: createdUser.employee?.id,
+          details: {
+            new: {
+              name: data.name,
+              email: data.email,
+              role: data.role,
+              position: data.position,
+              department: data.department,
+              isActive: true,
+            },
+          },
+        });
       });
 
       return redirectWithResult(request, 'success', 'created');
@@ -196,6 +231,34 @@ export async function POST(request: NextRequest) {
             manager: data.role === 'sales' && (currentEmployee.managerId || salesManager)
               ? { connect: { id: currentEmployee.managerId ?? salesManager?.id } }
               : { disconnect: true },
+          },
+        });
+        await createAuditEntry(tx, {
+          userId: auth.user.id,
+          actor: auth.user.name,
+          action: 'EMPLOYEE_UPDATED',
+          entity: 'Employee',
+          entityId: employeeId,
+          details: {
+            old: {
+              name: currentEmployee.fullName,
+              email: currentEmployee.user.email,
+              role: currentEmployee.user.role?.name ?? null,
+              position: currentEmployee.position,
+              department: currentEmployee.department,
+              phone: currentEmployee.phone,
+              isActive: currentEmployee.isActive,
+            },
+            new: {
+              name: data.name,
+              email: data.email,
+              role: data.role,
+              position: data.position,
+              department: data.department,
+              phone: data.phone || null,
+              isActive: data.isActive,
+              passwordChanged: Boolean(data.password),
+            },
           },
         });
       });

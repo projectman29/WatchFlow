@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { prisma } from './prisma';
 
@@ -10,13 +11,20 @@ export type SessionUser = {
   email: string;
   name: string;
   role: string;
+  permissions?: string[];
 };
 
 export function isEmployeeAccountActive(employee?: { isActive: boolean } | null): boolean {
   return employee?.isActive === true;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'watchflow-dev-secret-change-me';
+export function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
+    throw new Error('JWT_SECRET must be configured with at least 32 bytes.');
+  }
+  return secret;
+}
 
 export function parseLoginCredentials(input: unknown): { email: string; password: string } | null {
   if (!input) {
@@ -58,80 +66,57 @@ export function parseLoginCredentials(input: unknown): { email: string; password
   return null;
 }
 
-export function authenticateDemoAdmin(email: string, password: string): SessionUser | null {
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const demoUsers: Record<string, { password: string; name: string; role: string }> = {
-    'admin@watchflow.local': { password: 'admin123', name: 'Super Admin', role: 'admin' },
-    'manager@watchflow.local': { password: 'manager123', name: 'Марина Соколова', role: 'manager' },
-    'sales@watchflow.local': { password: 'sales123', name: 'Иван Петров', role: 'sales' },
-  };
-
-  const user = demoUsers[normalizedEmail];
-
-  if (!user || password !== user.password) {
-    return null;
-  }
-
-  return {
-    id: `demo-${user.role}`,
-    email: normalizedEmail,
-    name: user.name,
-    role: user.role,
-  };
-}
-
 export async function getLoginUser(email: string, password: string): Promise<SessionUser | null> {
   const normalizedEmail = email.trim().toLowerCase();
-
-  const demoUser = authenticateDemoAdmin(normalizedEmail, password);
-  if (demoUser) {
-    return demoUser;
-  }
 
   if (!process.env.DATABASE_URL) {
     return null;
   }
 
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      include: { role: true, employee: true },
-    });
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    include: { role: { include: { permissions: { select: { key: true } } } }, employee: true },
+  });
 
-    if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
-      return null;
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!isValidPassword) {
-      return null;
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role.name,
-    };
-  } catch {
+  if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
     return null;
   }
+
+  const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+  if (!isValidPassword) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role.name,
+    permissions: user.role.permissions.map(({ key }) => key),
+  };
 }
 
 export function signSession(user: SessionUser): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(user, getJwtSecret(), { expiresIn: '7d' });
 }
 
 export function verifySessionToken(token: string): SessionUser | null {
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload & SessionUser;
+    const payload = jwt.verify(token, getJwtSecret()) as JwtPayload & SessionUser;
+
+    if (
+      typeof payload.id !== 'string' ||
+      typeof payload.email !== 'string' ||
+      typeof payload.name !== 'string' ||
+      typeof payload.role !== 'string'
+    ) return null;
 
     return {
-      id: String(payload.id),
-      email: String(payload.email),
-      name: String(payload.name),
-      role: String(payload.role),
+      id: payload.id,
+      email: payload.email,
+      name: payload.name,
+      role: payload.role,
+      ...(Array.isArray(payload.permissions) && payload.permissions.every((permission) => typeof permission === 'string')
+        ? { permissions: payload.permissions }
+        : {}),
     };
   } catch {
     return null;
@@ -152,10 +137,6 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
     return null;
   }
 
-  if (sessionUser.id.startsWith('demo-')) {
-    return sessionUser;
-  }
-
   if (!process.env.DATABASE_URL) {
     return null;
   }
@@ -163,7 +144,7 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: sessionUser.id },
-      include: { role: true, employee: true },
+      include: { role: { include: { permissions: { select: { key: true } } } }, employee: true },
     });
 
     if (!user || !isEmployeeAccountActive(user.employee) || !user.role) {
@@ -175,13 +156,14 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
       email: user.email,
       name: user.name,
       role: user.role.name,
+      permissions: user.role.permissions.map(({ key }) => key),
     };
   } catch {
     return null;
   }
 }
 
-export function setSessionCookie(response: Response, token: string): void {
+export function setSessionCookie(response: NextResponse, token: string): void {
   const cookieOptions = {
     path: '/',
     httpOnly: true,
@@ -190,31 +172,15 @@ export function setSessionCookie(response: Response, token: string): void {
     secure: process.env.NODE_ENV === 'production',
   };
 
-  if ('cookies' in response && typeof response.cookies?.set === 'function') {
-    response.cookies.set(SESSION_COOKIE, token, cookieOptions);
-    return;
-  }
-
-  response.headers.set(
-    'Set-Cookie',
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${cookieOptions.maxAge};${cookieOptions.secure ? ' Secure;' : ''}`,
-  );
+  response.cookies.set(SESSION_COOKIE, token, cookieOptions);
 }
 
-export function clearSessionCookie(response: Response): void {
-  if ('cookies' in response && typeof response.cookies?.set === 'function') {
-    response.cookies.set(SESSION_COOKIE, '', {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 0,
-      secure: process.env.NODE_ENV === 'production',
-    });
-    return;
-  }
-
-  response.headers.set(
-    'Set-Cookie',
-    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;${process.env.NODE_ENV === 'production' ? ' Secure;' : ''}`,
-  );
+export function clearSessionCookie(response: NextResponse): void {
+  response.cookies.set(SESSION_COOKIE, '', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 0,
+    secure: process.env.NODE_ENV === 'production',
+  });
 }

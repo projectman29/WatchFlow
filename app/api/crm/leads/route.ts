@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Требуется войти в систему.' }, { status: 401 });
   }
 
-  if (!hasPermission(user.role, 'leads:write')) {
+  if (!hasPermission(user, 'leads:write')) {
     return NextResponse.json({ error: 'Недостаточно прав для создания лида.' }, { status: 403 });
   }
 

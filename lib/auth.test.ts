@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getCurrentUserFromCookies, parseLoginCredentials, setSessionCookie, signSession } from './auth';
-import { NextResponse } from 'next/server';
+import { getCurrentUserFromCookies, parseLoginCredentials, setSessionCookie, signSession, verifySessionToken } from './auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { middleware } from '../middleware';
+
+process.env.JWT_SECRET = 'test-session-secret-which-is-longer-than-32-bytes';
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
@@ -21,11 +24,11 @@ vi.mock('next/headers', () => ({
 
 describe('login credentials parsing', () => {
   it('accepts a browser form payload and a JSON payload', () => {
-    const jsonPayload = parseLoginCredentials({ email: 'admin@watchflow.local', password: 'admin123' });
-    const formPayload = parseLoginCredentials(new URLSearchParams({ email: 'admin@watchflow.local', password: 'admin123' }));
+    const jsonPayload = parseLoginCredentials({ email: 'user@example.com', password: 'not-a-real-password' });
+    const formPayload = parseLoginCredentials(new URLSearchParams({ email: 'user@example.com', password: 'not-a-real-password' }));
 
-    expect(jsonPayload).toEqual({ email: 'admin@watchflow.local', password: 'admin123' });
-    expect(formPayload).toEqual({ email: 'admin@watchflow.local', password: 'admin123' });
+    expect(jsonPayload).toEqual({ email: 'user@example.com', password: 'not-a-real-password' });
+    expect(formPayload).toEqual({ email: 'user@example.com', password: 'not-a-real-password' });
   });
 
   it('writes a session cookie through the NextResponse cookie API so the browser persists it', () => {
@@ -37,13 +40,34 @@ describe('login credentials parsing', () => {
     expect(response.headers.get('set-cookie')).toContain('watchflow_session=');
   });
 
-  it('keeps demo users authenticated even when the database is configured', async () => {
-    process.env.DATABASE_URL = 'file:./dev.db';
+  it('does not authenticate demo identities when no database is configured', async () => {
+    delete process.env.DATABASE_URL;
 
     const user = await getCurrentUserFromCookies();
 
-    expect(user).not.toBeNull();
-    expect(user?.id).toBe('demo-admin');
-    expect(user?.role).toBe('admin');
+    expect(user).toBeNull();
+  });
+
+  it('rejects session tokens when the JWT secret is not configured', () => {
+    const token = signSession({
+      id: 'user-1',
+      email: 'user@example.com',
+      name: 'User',
+      role: 'sales',
+    });
+    delete process.env.JWT_SECRET;
+
+    expect(verifySessionToken(token)).toBeNull();
+
+    process.env.JWT_SECRET = 'test-session-secret-which-is-longer-than-32-bytes';
+  });
+
+  it('rejects a forged administrator token before passing dashboard middleware', async () => {
+    const payload = btoa(JSON.stringify({ role: 'admin' })).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const response = await middleware(new NextRequest('http://localhost:3000/dashboard', {
+      headers: { cookie: `watchflow_session=eyJhbGciOiJIUzI1NiJ9.${payload}.invalid` },
+    }));
+
+    expect(response.headers.get('location')).toContain('/login');
   });
 });
