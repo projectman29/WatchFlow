@@ -140,7 +140,9 @@ export default async function OrdersPage({
                   </td>
                   <td className="px-4 py-3">{order.client}</td>
                   <td className="px-4 py-3">{order.product}</td>
-                  <td className="px-4 py-3 text-emerald-300">€{order.total}</td>
+                  <td className="px-4 py-3 text-emerald-300">
+                    {order.total.toLocaleString('ru-RU')} {order.currency ?? '(валюта не подтверждена)'}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-200">
                       {ORDER_STATUS_LABELS[order.status] ?? order.status}

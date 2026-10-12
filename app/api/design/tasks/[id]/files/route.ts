@@ -99,6 +99,7 @@ export async function POST(
       await transaction.order.update({
         where: { id: task.order.id },
         data: { status: 'WAITING_CLIENT_APPROVAL' },
+        select: { id: true },
       });
       await transaction.activityLog.create({
         data: {

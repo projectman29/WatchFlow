@@ -31,9 +31,24 @@ export default async function LogisticsPage({
           { shipments: { some: { status: { in: ['SHIPPED', 'DELIVERED', 'RETURNED'] } } } },
         ],
       },
-      include: {
-        client: true,
-        shipments: { orderBy: { createdAt: 'desc' }, take: 1 },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        total: true,
+        deposit: true,
+        client: { select: { name: true, phone: true, city: true, company: true } },
+        shipments: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            courierName: true,
+            trackingNumber: true,
+            updatedAt: true,
+          },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { hasPermission } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
-import { LEAD_LOSS_REASONS, LEAD_SOURCES, LEAD_STAGES, normalizeOptionalString } from '@/lib/crm';
+import { getRecordScope } from '@/lib/db-data';
+import { hasValidLeadLossReason, LEAD_LOSS_REASONS, LEAD_SOURCES, LEAD_STAGES, normalizeOptionalString } from '@/lib/crm';
 import { prisma } from '@/lib/prisma';
+import { isSalesDataFoundationReady } from '@/lib/sales-data-readiness';
 
 function successResponse(request: NextRequest, id: string) {
   const accept = request.headers.get('accept') ?? '';
@@ -86,8 +89,9 @@ export async function POST(
     assignedToId,
   } = parsed.data;
 
-  const existingLead = await prisma.lead.findUnique({
-    where: { id },
+  const scope = await getRecordScope(user);
+  const existingLead = await prisma.lead.findFirst({
+    where: { id, ...(scope ?? {}) },
     include: { client: true },
   });
 
@@ -96,13 +100,62 @@ export async function POST(
   }
 
   if (action === 'status') {
-    await prisma.lead.update({
-      where: { id },
-      data: {
-        status: status ?? existingLead.status,
-        reasonLost: status === 'LOST' ? reasonLost ?? null : null,
-      },
-    });
+    const salesDataReady = await isSalesDataFoundationReady();
+    const statusChange = await prisma.$transaction(async (transaction) => {
+      const currentLead = await transaction.lead.findFirst({
+        where: { id, ...(scope ?? {}) },
+        select: { status: true },
+      });
+      if (!currentLead) return 'not-found';
+
+      const nextStatus = status ?? currentLead.status;
+      if (!hasValidLeadLossReason(nextStatus, reasonLost)) return 'invalid-loss-reason';
+      const updated = await transaction.lead.updateMany({
+        where: { id, status: currentLead.status, ...(scope ?? {}) },
+        data: {
+          status: nextStatus,
+          reasonLost: nextStatus === 'LOST' ? reasonLost ?? null : null,
+        },
+      });
+      if (updated.count !== 1) return 'conflict';
+      if (nextStatus !== currentLead.status) {
+        if (salesDataReady) {
+          await transaction.leadStatusHistory.create({
+            data: {
+              leadId: existingLead.id,
+              fromStatus: currentLead.status,
+              toStatus: nextStatus,
+              changedById: user.id.startsWith('demo-') ? undefined : user.id,
+            },
+          });
+        }
+        await transaction.activityLog.create({
+          data: {
+            userId: user.id.startsWith('demo-') ? undefined : user.id,
+            action: 'LEAD_STATUS_CHANGED',
+            entity: 'Lead',
+            entityId: id,
+            details: JSON.stringify({
+              actor: user.name,
+              from: currentLead.status,
+              to: nextStatus,
+              reasonLost: nextStatus === 'LOST' ? reasonLost ?? null : null,
+            }),
+          },
+        });
+      }
+      return 'ok';
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    if (statusChange === 'not-found') {
+      return NextResponse.json({ error: 'Lead not found or not available.' }, { status: 404 });
+    }
+    if (statusChange === 'invalid-loss-reason') {
+      return NextResponse.json({ error: 'A loss reason is required.' }, { status: 400 });
+    }
+    if (statusChange === 'conflict') {
+      return NextResponse.json({ error: 'The lead status changed concurrently; reload and try again.' }, { status: 409 });
+    }
 
     return successResponse(request, id);
   }

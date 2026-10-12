@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { LeadRecord, OrderRecord } from '@/lib/demo-data';
-import { getLeadBoardStage, getLeadStatusLabel, LEAD_LOSS_REASONS, LEAD_STAGES, LEAD_STATUS_LABELS } from '@/lib/crm';
+import { getLeadBoardStage, getLeadStatusLabel, LEAD_LOSS_REASONS, LEAD_ORDER_CONVERSION_WINDOW_DAYS, LEAD_STAGES, LEAD_STATUS_LABELS } from '@/lib/crm';
 import { ORDER_STATUS_LABELS } from '@/lib/orders';
+import LeadOrderConversionForm from './lead-order-conversion-form';
 
 type LeadStage = (typeof LEAD_STAGES)[number];
 type DraggedLead = { id: string; stage: LeadStage };
@@ -14,12 +16,17 @@ export default function LeadsBoard({
   orders = [],
   canEdit,
   canViewOrders,
+  canCreateOrders,
+  salesDataReady,
 }: {
   leads: LeadRecord[];
   orders?: OrderRecord[];
   canEdit: boolean;
   canViewOrders?: boolean;
+  canCreateOrders?: boolean;
+  salesDataReady: boolean;
 }) {
+  const router = useRouter();
   const [draggedLead, setDraggedLead] = useState<DraggedLead | null>(null);
   const [dragOverStage, setDragOverStage] = useState<LeadStage | null>(null);
   const [pendingLostLead, setPendingLostLead] = useState<string | null>(null);
@@ -47,7 +54,7 @@ export default function LeadsBoard({
         throw new Error(result.error ?? 'Не удалось изменить статус лида.');
       }
 
-      window.location.assign('/crm');
+      router.refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось изменить статус лида.');
     } finally {
@@ -141,7 +148,7 @@ export default function LeadsBoard({
                       {lead.city ? <p className="mt-1 truncate text-[11px] text-slate-400">{lead.city}</p> : null}
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="truncate text-[10px] uppercase tracking-[0.1em] text-slate-400">{lead.source}</span>
-                        <span className="shrink-0 text-xs font-semibold text-cyan-300">€{lead.value}</span>
+                        <span className="shrink-0 text-xs font-semibold text-cyan-300">Бюджет: {lead.value.toLocaleString('ru-RU')}</span>
                       </div>
                       {canEdit && !lead.isDemo ? (
                         <>
@@ -156,6 +163,28 @@ export default function LeadsBoard({
                               <p className="text-[11px] text-slate-300">Статус: {getLeadStatusLabel(lead.status)}</p>
                               {lead.reasonLost ? <p className="text-[11px] text-rose-300">Причина: {lead.reasonLost}</p> : null}
                               {lead.notes ? <p className="text-[11px] text-slate-400">Комментарий: {lead.notes}</p> : null}
+                              {canViewOrders && lead.linkedOrder ? (
+                                <Link
+                                  href={`/orders/${encodeURIComponent(lead.linkedOrder.id)}`}
+                                  className="block rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-center text-xs text-emerald-200 hover:bg-emerald-500/20"
+                                >
+                                  Открыть заказ {lead.linkedOrder.number}
+                                </Link>
+                              ) : canCreateOrders && ['WAITING_PAYMENT', 'WON'].includes(lead.status) ? (
+                                !salesDataReady ? (
+                                  <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-[11px] text-amber-200">
+                                    Создание заказа временно недоступно до обновления базы данных.
+                                  </p>
+                                ) : isWithinConversionWindow(lead.firstQualifiedAt) ? (
+                                  <LeadOrderConversionForm leadId={lead.id} suggestedBudget={lead.value} />
+                                ) : (
+                                  <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-[11px] text-amber-200">
+                                    {lead.firstQualifiedAt
+                                      ? 'Окно создания заказа — 30 дней — истекло.'
+                                      : 'Нет записи о первом переходе в квалифицированный статус; заказ создать нельзя.'}
+                                  </p>
+                                )
+                              ) : null}
                               <form className="space-y-2 border-t border-slate-800 pt-2" action={`/api/crm/leads/${lead.id}`} method="POST">
                                 <input type="hidden" name="action" value="status" />
                                 <label className="block text-[11px] text-slate-400">
@@ -214,7 +243,9 @@ export default function LeadsBoard({
                   </div>
                   <p className="mt-3 font-semibold text-white">{order.client}</p>
                   <p className="mt-1 text-xs text-slate-400">{order.product}</p>
-                  <p className="mt-2 text-sm text-emerald-300">€{order.total}</p>
+                  <p className="mt-2 text-sm text-emerald-300">
+                    {order.total.toLocaleString('ru-RU')} {order.currency ?? '(валюта не подтверждена)'}
+                  </p>
                   <p className="mt-2 text-xs text-slate-400">Ответственный: {order.assignee}</p>
                 </Link>
               ))}
@@ -263,4 +294,11 @@ export default function LeadsBoard({
       ) : null}
     </>
   );
+}
+
+function isWithinConversionWindow(qualifiedAt?: string) {
+  if (!qualifiedAt) return false;
+  const qualifiedAtMs = new Date(qualifiedAt).getTime();
+  const elapsed = Date.now() - qualifiedAtMs;
+  return Number.isFinite(qualifiedAtMs) && elapsed >= 0 && elapsed <= LEAD_ORDER_CONVERSION_WINDOW_DAYS * 86_400_000;
 }

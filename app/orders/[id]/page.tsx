@@ -3,8 +3,11 @@ import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
 import { canAccessSection, hasPermission } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
-import { getOrderByIdFromDb } from '@/lib/db-data';
+import { getOrderByIdFromDb, getRecordScope } from '@/lib/db-data';
 import { getAllowedOrderStatusTransitions, getOrderProgressPercent, getOrderStatusIndex, ORDER_STATUS_FLOW, ORDER_STATUS_LABELS } from '@/lib/orders';
+import { prisma } from '@/lib/prisma';
+import FinancialEventsForm from './financial-events-form';
+import { isSalesDataFoundationReady } from '@/lib/sales-data-readiness';
 
 export default async function OrderDetailPage({
   params,
@@ -32,6 +35,23 @@ export default async function OrderDetailPage({
   }
 
   const canEditOrders = hasPermission(user, 'orders:write');
+  const salesDataReady = canEditOrders && await isSalesDataFoundationReady();
+  const financialEvents = !salesDataReady || order.id.startsWith('order-')
+    ? null
+    : await prisma.order.findFirst({
+        where: { id: order.id, ...((await getRecordScope(user)) ?? {}) },
+        select: {
+          currency: true,
+          payments: {
+            orderBy: { occurredAt: 'desc' },
+            select: { id: true, kind: true, amount: true, currency: true, occurredAt: true, reference: true, note: true },
+          },
+          directCosts: {
+            orderBy: { incurredAt: 'desc' },
+            select: { id: true, category: true, amount: true, currency: true, incurredAt: true, description: true },
+          },
+        },
+      });
   const nextStatuses = getAllowedOrderStatusTransitions(order.status);
   const editableItems = order.items?.length
     ? order.items
@@ -130,9 +150,9 @@ export default async function OrderDetailPage({
           <aside className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Финансы</p>
             <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between"><span>Итого</span><strong className="text-emerald-300">€{order.total}</strong></div>
-              <div className="flex justify-between"><span>Предоплата</span><span>€{order.deposit}</span></div>
-              <div className="flex justify-between"><span>Остаток</span><span>€{order.balance}</span></div>
+              <div className="flex justify-between"><span>Итого</span><strong className="text-emerald-300">{order.total.toLocaleString('ru-RU')} {order.currency ?? '(валюта не подтверждена)'}</strong></div>
+              <div className="flex justify-between"><span>Предоплата</span><span>{order.deposit.toLocaleString('ru-RU')} {order.currency ?? '(валюта не подтверждена)'}</span></div>
+              <div className="flex justify-between"><span>Остаток</span><span>{order.balance.toLocaleString('ru-RU')} {order.currency ?? '(валюта не подтверждена)'}</span></div>
               <div className="flex justify-between"><span>Статус оплаты</span><span>{order.payment}</span></div>
             </div>
           </aside>
@@ -238,6 +258,29 @@ export default async function OrderDetailPage({
               </form>
             </div>
           </section>
+        ) : null}
+
+        {canEditOrders && !salesDataReady ? (
+          <p role="status" className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Учёт платежей и прямых затрат временно отключён до обновления базы данных. Текущая сумма предоплаты остаётся прежним сводным полем.
+          </p>
+        ) : null}
+
+        {canEditOrders && financialEvents ? (
+          <FinancialEventsForm
+            orderId={order.id}
+            currency={financialEvents.currency}
+            payments={financialEvents.payments.map((payment) => ({
+              ...payment,
+              amount: payment.amount.toString(),
+              occurredAt: payment.occurredAt.toISOString(),
+            }))}
+            costs={financialEvents.directCosts.map((cost) => ({
+              ...cost,
+              amount: cost.amount.toString(),
+              incurredAt: cost.incurredAt.toISOString(),
+            }))}
+          />
         ) : null}
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">

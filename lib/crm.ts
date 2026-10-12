@@ -6,6 +6,8 @@ export const LEAD_STAGES = [
   'LOST',
 ] as const;
 
+export const LEAD_ORDER_CONVERSION_WINDOW_DAYS = 30;
+
 export const LEAD_SOURCES = [
   'Instagram',
   'TikTok',

@@ -5,6 +5,7 @@ import { LEAD_SOURCES, getLeadSourceSummary, getPipelineSummary } from '@/lib/cr
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { getCRMLeadsFromDb, getLeadAssignees, getOrdersFromDb } from '@/lib/db-data';
 import LeadsBoard from './leads-board';
+import { isSalesDataFoundationReady } from '@/lib/sales-data-readiness';
 
 export default async function CRMPage({
   searchParams,
@@ -22,6 +23,7 @@ export default async function CRMPage({
   }
 
   const canViewCrmAnalytics = canAccessSection(user, 'crm');
+  const salesDataReady = await isSalesDataFoundationReady();
   const leads = await getCRMLeadsFromDb(user);
   const orders = canAccessSection(user, 'orders') ? await getOrdersFromDb(user) : [];
   const activeOrders = orders.filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED');
@@ -173,6 +175,8 @@ export default async function CRMPage({
           orders={activeOrders}
           canEdit={hasPermission(user, 'leads:write')}
           canViewOrders={canAccessSection(user, 'orders')}
+          canCreateOrders={hasPermission(user, 'leads:write') && hasPermission(user, 'orders:write')}
+          salesDataReady={salesDataReady}
         />
       </div>
     </main>

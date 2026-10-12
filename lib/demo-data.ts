@@ -26,6 +26,8 @@ export type LeadRecord = {
   id: string;
   assignedToId?: string;
   assignedToEmail?: string;
+  linkedOrder?: { id: string; number: string };
+  firstQualifiedAt?: string;
   assignedTo?: string;
   phone?: string;
   whatsapp?: string;
@@ -48,6 +50,7 @@ export type OrderRecord = {
   client: string;
   product: string;
   total: number;
+  currency?: string | null;
   discount?: number;
   status: OrderStatus;
   assignee: string;

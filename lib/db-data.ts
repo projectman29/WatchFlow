@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { demoLeads, demoOrders, type LeadRecord, type OrderRecord } from '@/lib/demo-data';
 import { type Employee, type EmployeeDepartment, type EmployeeRole } from '@/lib/employees';
-import { filterDemoRecordsByOwner, getAssignedEmployeeIds, normalizeRole } from '@/lib/access';
+import { canAccessSection, filterDemoRecordsByOwner, getAssignedEmployeeIds, hasPermission, normalizeRole } from '@/lib/access';
 import type { SessionUser } from '@/lib/auth';
 import { ORDER_STATUS_LABELS } from '@/lib/orders';
 import { getDateRange } from '@/lib/search';
+import { isSalesDataFoundationReady } from '@/lib/sales-data-readiness';
 
 export type LeadAssignee = { id: string; name: string; email: string; role: string };
 
@@ -108,17 +109,37 @@ export async function getCRMLeadsFromDb(user?: SessionUser): Promise<LeadRecord[
   }
 
   const scope = user ? await getRecordScope(user) : null;
+  const salesDataReady = await isSalesDataFoundationReady();
   const leads = await prisma.lead.findMany({
     where: scope ?? undefined,
-    include: { client: true, manager: { include: { user: true } } },
+    include: {
+      client: true,
+      manager: { include: { user: true } },
+      orders: { select: { id: true, number: true }, orderBy: { createdAt: 'asc' } },
+    },
     orderBy: { createdAt: 'desc' },
   });
+  const qualifiedTransitions = salesDataReady
+    ? await prisma.leadStatusHistory.findMany({
+        where: { leadId: { in: leads.map((lead) => lead.id) }, toStatus: { in: ['WAITING_PAYMENT', 'WON'] } },
+        orderBy: { changedAt: 'asc' },
+        distinct: ['leadId'],
+        select: { leadId: true, changedAt: true },
+      })
+    : [];
+  const qualifiedAtByLead = new Map(qualifiedTransitions.map(({ leadId, changedAt }) => [leadId, changedAt]));
 
   return leads.map((lead) => ({
     id: lead.id,
     assignedToId: lead.manager?.id,
     assignedTo: lead.manager?.fullName,
     assignedToEmail: lead.manager?.user.email,
+    linkedOrder: user && canAccessSection(user, 'orders') && lead.orders[0]
+      ? { id: lead.orders[0].id, number: lead.orders[0].number }
+      : undefined,
+    firstQualifiedAt: salesDataReady && user && hasPermission(user, 'leads:write') && hasPermission(user, 'orders:write')
+      ? qualifiedAtByLead.get(lead.id)?.toISOString()
+      : undefined,
     phone: lead.client?.phone ?? undefined,
     whatsapp: lead.client?.whatsapp ?? undefined,
     instagram: lead.client?.instagram ?? undefined,
@@ -156,6 +177,7 @@ export async function getOrdersFromDb(user?: SessionUser, filters: OrderFilters 
   }
 
   const scope = user ? await getRecordScope(user) : null;
+  const salesDataReady = await isSalesDataFoundationReady();
   const dateRange = getDateRange(filters.from, filters.to);
   const where = {
     ...(scope ?? {}),
@@ -172,7 +194,35 @@ export async function getOrdersFromDb(user?: SessionUser, filters: OrderFilters 
   };
   const orders = await prisma.order.findMany({
     where,
-    include: { client: true, items: true, manager: true },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      total: true,
+      discount: true,
+      deposit: true,
+      paymentStatus: true,
+      clientId: true,
+      leadId: true,
+      managerId: true,
+      createdAt: true,
+      updatedAt: true,
+      ...(salesDataReady ? { currency: true } : {}),
+      client: { select: { name: true, city: true, company: true } },
+      items: {
+        select: {
+          id: true,
+          productName: true,
+          quantity: true,
+          unitPrice: true,
+          model: true,
+          color: true,
+          strap: true,
+          engraving: true,
+        },
+      },
+      manager: { select: { id: true, fullName: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -182,6 +232,7 @@ export async function getOrdersFromDb(user?: SessionUser, filters: OrderFilters 
     client: order.client?.name ?? 'Неизвестный клиент',
     product: order.items[0]?.productName ?? 'Custom Watch',
     total: Number(order.total ?? 0),
+    currency: 'currency' in order ? order.currency : null,
     discount: Number(order.discount ?? 0),
     status: (order.status as OrderRecord['status']) ?? 'NEW',
     assignee: order.manager?.fullName ?? 'Не назначен',

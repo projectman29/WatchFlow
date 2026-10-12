@@ -86,7 +86,14 @@ export async function POST(
     const scope = await getRecordScope(user);
     const order = await prisma.order.findUnique({
       where: { id: parsed.data.orderId },
-      include: { designTask: true, manager: { select: { userId: true } } },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        managerId: true,
+        designTask: true,
+        manager: { select: { userId: true } },
+      },
     });
     if (!order) return respond(request, 'order_not_found', 404);
     if (scope && (!order.managerId || !scope.managerId.in.includes(order.managerId))) {
@@ -110,6 +117,7 @@ export async function POST(
       await transaction.order.update({
         where: { id: order.id },
         data: { status: 'WAITING_DESIGN' },
+        select: { id: true },
       });
       await transaction.activityLog.create({
         data: {
@@ -206,6 +214,7 @@ export async function POST(
       await transaction.order.update({
         where: { id: task.order.id },
         data: { status: 'DESIGN_IN_PROGRESS' },
+        select: { id: true },
       });
       await transaction.activityLog.create({
         data: {
@@ -237,6 +246,7 @@ export async function POST(
       await transaction.order.update({
         where: { id: task.order.id },
         data: { status: 'DESIGN_APPROVED' },
+        select: { id: true },
       });
       await transaction.activityLog.create({
         data: {
@@ -271,6 +281,7 @@ export async function POST(
       await transaction.order.update({
         where: { id: task.order.id },
         data: { status: 'DESIGN_IN_PROGRESS' },
+        select: { id: true },
       });
       await transaction.activityLog.create({
         data: {

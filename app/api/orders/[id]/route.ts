@@ -108,7 +108,22 @@ export async function POST(
   const scope = await getRecordScope(user);
   const order = await prisma.order.findFirst({
     where: { id, ...(scope ?? {}) },
-    include: { items: true, manager: { select: { userId: true } } },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      total: true,
+      discount: true,
+      deposit: true,
+      paymentStatus: true,
+      managerId: true,
+      clientId: true,
+      leadId: true,
+      createdAt: true,
+      updatedAt: true,
+      items: { select: { id: true, productName: true, quantity: true, unitPrice: true, model: true, color: true, strap: true, engraving: true } },
+      manager: { select: { userId: true } },
+    },
   });
 
   if (!order) {
@@ -129,6 +144,7 @@ export async function POST(
         await transaction.order.update({
           where: { id: order.id },
           data: { status: statusUpdate.status },
+          select: { id: true },
         });
         if (statusUpdate.status === 'WAITING_DESIGN') {
           await transaction.designTask.upsert({
@@ -259,6 +275,7 @@ export async function POST(
           deposit: edit.deposit,
           paymentStatus,
         },
+        select: { id: true },
       });
 
       for (const item of edit.items) {

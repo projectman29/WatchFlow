@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { shipments: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        shipments: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
     });
 
     if (!order) {
@@ -84,6 +89,7 @@ export async function POST(request: NextRequest) {
       await tx.order.update({
         where: { id: order.id },
         data: { status },
+        select: { id: true },
       });
 
       await tx.activityLog.create({

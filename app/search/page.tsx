@@ -51,9 +51,15 @@ export default async function SearchPage({
               { shipments: { some: { trackingNumber: { contains: term, mode: 'insensitive' } } } },
             ],
           },
-          include: {
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            total: true,
+            clientId: true,
+            createdAt: true,
             client: { select: { name: true, phone: true, city: true } },
-            shipments: { select: { trackingNumber: true } },
+            shipments: { select: { id: true, trackingNumber: true } },
           },
           orderBy: { createdAt: 'desc' },
           take: 20,
