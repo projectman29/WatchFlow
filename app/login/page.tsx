@@ -1,15 +1,60 @@
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error: errorKey } = await searchParams;
-  const errorMessage =
-    errorKey === 'missing_credentials'
-      ? 'Email and password are required.'
-      : errorKey === 'invalid_credentials'
-        ? 'Invalid credentials'
-        : '';
+'use client';
+
+import { FormEvent, Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+const ERROR_MESSAGES: Record<string, string> = {
+  missing_credentials: 'Email and password are required.',
+  invalid_credentials: 'Invalid credentials',
+  rate_limited: 'Too many failed login attempts. Please try again later.',
+};
+
+function LoginPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const errorKey = searchParams.get('error') ?? '';
+  const displayedError = error || ERROR_MESSAGES[errorKey] || '';
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+
+    const nextEmail = email.trim();
+    const nextPassword = password;
+
+    if (!nextEmail || !nextPassword) {
+      setError(ERROR_MESSAGES.missing_credentials);
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: nextEmail, password: nextPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Login failed.');
+      }
+
+      router.push('/dashboard');
+      router.refresh();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Login failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white">
@@ -19,12 +64,14 @@ export default async function LoginPage({
           <h1 className="mt-3 text-3xl font-bold">Вход в систему</h1>
         </div>
 
-        <form className="space-y-5" action="/api/auth/login" method="POST" autoComplete="off">
+        <form className="space-y-5" onSubmit={handleSubmit} autoComplete="off">
           <label className="block text-sm text-slate-300">
             Email
             <input
               name="email"
               type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               autoComplete="off"
               className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none ring-0 transition focus:border-cyan-400"
               required
@@ -36,27 +83,49 @@ export default async function LoginPage({
             <input
               name="password"
               type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
               autoComplete="off"
               className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none ring-0 transition focus:border-cyan-400"
               required
             />
           </label>
 
-          {errorMessage ? (
+          {displayedError ? (
             <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-              {errorMessage}
+              {displayedError}
             </div>
           ) : null}
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
+            disabled={isSubmitting}
+            className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Войти
+            {isSubmitting ? 'Проверка...' : 'Войти'}
           </button>
         </form>
 
+        <div className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+          <p>Демо-аккаунты:</p>
+          <p>admin@watchflow.local / admin123</p>
+          <p>manager@watchflow.local / manager123</p>
+          <p>sales@watchflow.local / sales123</p>
+          <p>designer@watchflow.local / designer123</p>
+          <p>master@watchflow.local / master123</p>
+          <p>warehouse@watchflow.local / warehouse123</p>
+          <p>logistics@watchflow.local / logistics123</p>
+          <p>marketing@watchflow.local / marketing123</p>
+        </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white"><div className="text-slate-300">Loading...</div></main>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

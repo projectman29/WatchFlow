@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NextResponse } from 'next/server';
-import { clearSessionCookie } from './auth';
+import { authenticateDemoAdmin, clearSessionCookie } from './auth';
 import { canAccessSection, filterDemoRecordsByOwner, getAssignedEmployeeIds, hasPermission, ROLE_PERMISSIONS } from './access';
 import { demoLeads } from './demo-data';
 import { getProtectedSectionForPath } from '../middleware';
@@ -118,6 +118,14 @@ describe('RBAC access rules', () => {
     expect(canAccessSection('warehouse', 'warehouse')).toBe(true);
     expect(canAccessSection('manager', 'employees')).toBe(false);
     expect(canAccessSection('admin', 'employees')).toBe(true);
+  });
+
+  it('allows every demo role login in the default demo environment', () => {
+    expect(authenticateDemoAdmin('designer@watchflow.local', 'designer123')?.role).toBe('designer');
+    expect(authenticateDemoAdmin('master@watchflow.local', 'master123')?.role).toBe('master');
+    expect(authenticateDemoAdmin('warehouse@watchflow.local', 'warehouse123')?.role).toBe('warehouse');
+    expect(authenticateDemoAdmin('logistics@watchflow.local', 'logistics123')?.role).toBe('logistics');
+    expect(authenticateDemoAdmin('marketing@watchflow.local', 'marketing123')?.role).toBe('marketing');
   });
 
   it('clears the session cookie when logging out', () => {

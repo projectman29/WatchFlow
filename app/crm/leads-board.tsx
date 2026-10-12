@@ -47,7 +47,7 @@ export default function LeadsBoard({
         throw new Error(result.error ?? 'Не удалось изменить статус лида.');
       }
 
-      window.location.assign(response.url);
+      window.location.assign('/crm');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось изменить статус лида.');
     } finally {

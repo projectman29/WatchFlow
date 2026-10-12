@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { hasPermission } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { LEAD_SOURCES } from '@/lib/crm';
+import { LEAD_SOURCES, normalizeOptionalString } from '@/lib/crm';
 import { getLeadAssignees } from '@/lib/db-data';
 
 const createLeadSchema = z.object({
@@ -30,14 +30,14 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const parsed = createLeadSchema.safeParse({
-    clientName: formData.get('clientName'),
-    phone: formData.get('phone'),
-    whatsapp: formData.get('whatsapp') ?? undefined,
-    instagram: formData.get('instagram') ?? undefined,
-    city: formData.get('city') ?? undefined,
-    value: formData.get('value'),
-    source: formData.get('source'),
-    notes: formData.get('notes') ?? undefined,
+    clientName: normalizeOptionalString(formData.get('clientName')),
+    phone: normalizeOptionalString(formData.get('phone')),
+    whatsapp: normalizeOptionalString(formData.get('whatsapp')),
+    instagram: normalizeOptionalString(formData.get('instagram')),
+    city: normalizeOptionalString(formData.get('city')),
+    value: normalizeOptionalString(formData.get('value')),
+    source: normalizeOptionalString(formData.get('source')),
+    notes: normalizeOptionalString(formData.get('notes')),
   });
 
   if (!parsed.success) {

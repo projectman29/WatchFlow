@@ -2,9 +2,14 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { canAccessSection } from '@/lib/access';
 import { getCurrentUserFromCookies } from '@/lib/auth';
-import { getReadyForShipmentOrders, getShipmentSummary, LOGISTICS_STATUS_LABELS, LOGISTICS_STATUSES, readyShipments } from '@/lib/logistics';
+import { prisma } from '@/lib/prisma';
+import { getReadyForShipmentOrders, getShipmentSummary, LOGISTICS_STATUS_LABELS, LOGISTICS_STATUSES, readyShipments, type ReadyShipment } from '@/lib/logistics';
 
-export default async function LogisticsPage() {
+export default async function LogisticsPage({
+  searchParams,
+}: {
+  searchParams?: { updated?: string } | Promise<{ updated?: string }>;
+}) {
   const user = await getCurrentUserFromCookies();
 
   if (!user) {
@@ -15,8 +20,60 @@ export default async function LogisticsPage() {
     redirect('/dashboard');
   }
 
-  const summary = getShipmentSummary(readyShipments);
-  const readyQueue = getReadyForShipmentOrders(readyShipments);
+  let shipments: ReadyShipment[] = readyShipments;
+  let databaseAvailable = false;
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: {
+        OR: [
+          { status: { in: ['READY_FOR_SHIPMENT', 'SHIPPED', 'DELIVERED'] } },
+          { shipments: { some: { status: { in: ['SHIPPED', 'DELIVERED', 'RETURNED'] } } } },
+        ],
+      },
+      include: {
+        client: true,
+        shipments: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    shipments = orders.map((order) => {
+      const shipment = order.shipments[0];
+      const status = shipment?.status === 'PREPARING'
+        ? 'READY_FOR_SHIPMENT'
+        : shipment?.status ?? order.status;
+
+      return {
+        id: shipment?.id ?? order.id,
+        orderId: order.id,
+        persisted: true,
+        order: order.number,
+        client: order.client?.name ?? 'Неизвестный клиент',
+        phone: order.client?.phone ?? 'Не указан',
+        city: order.client?.city ?? 'Не указан',
+        address: order.client?.company ?? 'Адрес не указан',
+        amount: Number(order.total),
+        deliveryType: 'Доставка клиенту',
+        cashOnDelivery: Math.max(0, Number(order.total) - Number(order.deposit)),
+        status: (status === 'RETURNED' ? status : status) as ReadyShipment['status'],
+        courier: shipment?.courierName ?? 'Не назначен',
+        service: shipment?.courierName ?? 'Не назначена',
+        tracking: shipment?.trackingNumber ?? 'Не указан',
+        note: shipment ? `Обновлено: ${shipment.updatedAt.toLocaleString('ru-RU')}` : 'Готов к оформлению отправки',
+      };
+    });
+    databaseAvailable = true;
+  } catch (error) {
+    console.error('Unable to load shipments:', error);
+  }
+
+  const params = searchParams ? await searchParams : {};
+  const updatedMessage = params.updated
+    ? ({ shipped: 'Отправление сохранено, заказ отмечен как отправленный.', delivered: 'Доставка отмечена как выполненная.', returned: 'Возврат зарегистрирован.' } as Record<string, string>)[params.updated]
+    : '';
+  const summary = getShipmentSummary(shipments);
+  const readyQueue = getReadyForShipmentOrders(shipments);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-50">
@@ -36,6 +93,9 @@ export default async function LogisticsPage() {
             </Link>
           </div>
         </header>
+
+        {updatedMessage ? <p className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{updatedMessage}</p> : null}
+        {!databaseAvailable ? <p className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">Показаны демо-отправления: подключение к базе недоступно, изменения не будут сохранены.</p> : null}
 
         <section className="mb-8 grid gap-4 md:grid-cols-4">
           <MetricCard label="Готовы" value={summary.ready} accent="text-cyan-300" />
@@ -57,7 +117,7 @@ export default async function LogisticsPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
-          {readyShipments.map((shipment) => (
+          {shipments.map((shipment) => (
             <article key={shipment.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
@@ -84,6 +144,31 @@ export default async function LogisticsPage() {
                 <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Комментарий</p>
                 <p className="mt-2 text-sm text-slate-200">{shipment.note}</p>
               </div>
+
+              {shipment.persisted && shipment.orderId && shipment.status === 'READY_FOR_SHIPMENT' ? (
+                <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]" action="/api/logistics/shipments" method="POST">
+                  <input type="hidden" name="orderId" value={shipment.orderId} />
+                  <input type="hidden" name="status" value="SHIPPED" />
+                  <input name="courierName" aria-label="Служба или курьер" placeholder="Служба / курьер" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+                  <input name="trackingNumber" aria-label="Трек-номер" placeholder="Трек-номер" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+                  <button type="submit" className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">Отметить отправку</button>
+                </form>
+              ) : null}
+
+              {shipment.persisted && shipment.orderId && shipment.status === 'SHIPPED' ? (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <form action="/api/logistics/shipments" method="POST">
+                    <input type="hidden" name="orderId" value={shipment.orderId} />
+                    <input type="hidden" name="status" value="DELIVERED" />
+                    <button type="submit" className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400">Подтвердить доставку</button>
+                  </form>
+                  <form action="/api/logistics/shipments" method="POST">
+                    <input type="hidden" name="orderId" value={shipment.orderId} />
+                    <input type="hidden" name="status" value="RETURNED" />
+                    <button type="submit" className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10">Зарегистрировать возврат</button>
+                  </form>
+                </div>
+              ) : null}
             </article>
           ))}
         </section>

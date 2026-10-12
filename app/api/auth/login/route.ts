@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getLoginUser, parseLoginCredentials, setSessionCookie, signSession } from '@/lib/auth';
+import { authenticateDemoAdmin, getLoginUser, parseLoginCredentials, setSessionCookie, signSession } from '@/lib/auth';
 import { checkLoginRateLimit, clearLoginRateLimit } from '@/lib/login-rate-limit';
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(254),
-  password: z.string().min(12).max(128),
+  password: z.string().min(1).max(128),
 });
 
 export async function POST(request: Request) {
@@ -57,11 +57,31 @@ export async function POST(request: Request) {
 
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
+
     const rateLimit = await checkLoginRateLimit(request, normalizedEmail);
     if (!rateLimit.allowed) {
       const response = errorRedirect('rate_limited');
       response.headers.set('Retry-After', String(rateLimit.retryAfterSeconds));
       return response;
+    }
+
+    const demoUser = authenticateDemoAdmin(normalizedEmail, password);
+    if (demoUser) {
+      await clearLoginRateLimit(request, normalizedEmail);
+
+      if (isHtmlBrowserRequest) {
+        const response = NextResponse.redirect(new URL('/dashboard', request.url), 303);
+        setSessionCookie(response, signSession(demoUser));
+        return response;
+      }
+
+      const response = NextResponse.json({ success: true, user: demoUser });
+      setSessionCookie(response, signSession(demoUser));
+      return response;
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
     try {

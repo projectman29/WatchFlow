@@ -105,6 +105,7 @@ export default async function DashboardPage() {
     { href: '/production', label: 'Производство', show: canAccessSection(user, 'production') },
     { href: '/warehouse', label: 'Склад', show: canAccessSection(user, 'warehouse') },
     { href: '/logistics', label: 'Логистика', show: canAccessSection(user, 'logistics') },
+    { href: '/marketing', label: 'Маркетинг', show: canAccessSection(user, 'marketing') },
     { href: '/employees', label: 'Сотрудники', show: canAccessSection(user, 'employees') },
     { href: '/audit', label: 'История и аудит', show: hasPermission(user, 'audit:read') },
     { href: '/admin', label: 'Admin Panel', show: canAccessSection(user, 'admin') },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOGISTICS_STATUSES, getLogisticsStatusIndex, getReadyForShipmentOrders, readyShipments } from './logistics';
+import { canTransitionShipmentStatus, LOGISTICS_STATUSES, getLogisticsStatusIndex, getReadyForShipmentOrders, readyShipments } from './logistics';
 
 describe('logistics workflow', () => {
   it('contains the required shipment lifecycle', () => {
@@ -16,5 +16,13 @@ describe('logistics workflow', () => {
   it('calculates stage order correctly in the delivery pipeline', () => {
     expect(getLogisticsStatusIndex('READY_FOR_SHIPMENT')).toBeLessThan(getLogisticsStatusIndex('SHIPPED'));
     expect(getLogisticsStatusIndex('SHIPPED')).toBeLessThan(getLogisticsStatusIndex('DELIVERED'));
+  });
+
+  it('allows only valid shipment lifecycle transitions', () => {
+    expect(canTransitionShipmentStatus('READY_FOR_SHIPMENT', 'SHIPPED')).toBe(true);
+    expect(canTransitionShipmentStatus('SHIPPED', 'DELIVERED')).toBe(true);
+    expect(canTransitionShipmentStatus('SHIPPED', 'RETURNED')).toBe(true);
+    expect(canTransitionShipmentStatus('READY_FOR_SHIPMENT', 'DELIVERED')).toBe(false);
+    expect(canTransitionShipmentStatus('DELIVERED', 'SHIPPED')).toBe(false);
   });
 });
