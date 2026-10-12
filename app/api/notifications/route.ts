@@ -7,11 +7,14 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Требуется войти в систему.' }, { status: 401 });
   }
-  const notificationUser = user.id.startsWith('demo-')
+  const notificationUser = user.id.startsWith('demo-') && process.env.DATABASE_URL
     ? await prisma.user.findUnique({ where: { email: user.email }, select: { id: true } })
     : { id: user.id };
   if (!notificationUser) {
     return NextResponse.json({ error: 'Аккаунт не найден.' }, { status: 401 });
+  }
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ success: true });
   }
 
   const formData = await request.formData();

@@ -34,6 +34,10 @@ export async function checkLoginRateLimit(
   request: Request,
   email: string,
 ): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+  if (!process.env.DATABASE_URL) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
   const address = clientAddress(request);
   const keys = [
     hashKey(`account:${email.toLowerCase()}`),
@@ -61,6 +65,10 @@ export async function checkLoginRateLimit(
 }
 
 export async function clearLoginRateLimit(request: Request, email: string): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    return;
+  }
+
   const address = clientAddress(request);
   const keys = [
     hashKey(`account:${email.toLowerCase()}`),

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { AI_PERMISSION_KEYS, AI_ROLE_DEFAULTS } from '../lib/access';
 
 const prisma = new PrismaClient();
 
@@ -25,6 +26,7 @@ const PERMISSION_KEYS = [
   'audit:read',
   'leads:read',
   'leads:write',
+  ...AI_PERMISSION_KEYS,
 ];
 
 const ROLE_CONFIG = [
@@ -54,16 +56,29 @@ async function main() {
     designer: getSeedPassword('SEED_DESIGNER_PASSWORD'),
   };
 
+  const newlyCreatedAiPermissions: string[] = [];
+
   for (const permission of PERMISSION_KEYS) {
+    const existingPermission = await prisma.permission.findUnique({
+      where: { key: permission },
+      select: { id: true },
+    });
+
     await prisma.permission.upsert({
       where: { key: permission },
       update: { label: permission },
       create: { key: permission, label: permission },
     });
+
+    if (!existingPermission && AI_PERMISSION_KEYS.includes(permission as (typeof AI_PERMISSION_KEYS)[number])) {
+      newlyCreatedAiPermissions.push(permission);
+    }
   }
 
+  const existingRoleNames = new Set<string>();
+
   for (const role of ROLE_CONFIG) {
-    const permissionKeys =
+    const basePermissionKeys =
       role.name === 'admin'
         ? PERMISSION_KEYS
         : role.name === 'manager'
@@ -79,6 +94,16 @@ async function main() {
                   : role.name === 'logistics'
                     ? ['dashboard:read', 'logistics:read', 'logistics:write', 'orders:read']
                     : ['dashboard:read', 'marketing:read', 'marketing:write'];
+    const permissionKeys = [
+      ...basePermissionKeys,
+      ...(AI_ROLE_DEFAULTS[role.name as keyof typeof AI_ROLE_DEFAULTS] ?? []),
+    ];
+
+    const existingRole = await prisma.role.findUnique({
+      where: { name: role.name },
+      select: { id: true },
+    });
+    if (existingRole) existingRoleNames.add(role.name);
 
     await prisma.role.upsert({
       where: { name: role.name },
@@ -93,6 +118,24 @@ async function main() {
         },
       },
     });
+  }
+
+  for (const roleName of existingRoleNames) {
+    const defaultAiPermissions = AI_ROLE_DEFAULTS[roleName as keyof typeof AI_ROLE_DEFAULTS] ?? [];
+    const permissionsToConnect = newlyCreatedAiPermissions.filter((key) =>
+      defaultAiPermissions.includes(key as never),
+    );
+
+    if (permissionsToConnect.length > 0) {
+      await prisma.role.update({
+        where: { name: roleName },
+        data: {
+          permissions: {
+            connect: permissionsToConnect.map((key) => ({ key })),
+          },
+        },
+      });
+    }
   }
 
   const legacyDesignRole = await prisma.role.findUnique({ where: { name: 'design' } });

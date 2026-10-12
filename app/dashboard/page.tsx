@@ -75,10 +75,10 @@ export default async function DashboardPage() {
   }
 
   const summary = await getDashboardSummary(user);
-  const notificationUser = user.id.startsWith('demo-')
+  const notificationUser = user.id.startsWith('demo-') && process.env.DATABASE_URL
     ? await prisma.user.findUnique({ where: { email: user.email }, select: { id: true } })
     : { id: user.id };
-  const unreadNotifications = notificationUser
+  const unreadNotifications = process.env.DATABASE_URL && notificationUser
     ? await prisma.notification.count({ where: { userId: notificationUser.id, readAt: null } })
     : 0;
 

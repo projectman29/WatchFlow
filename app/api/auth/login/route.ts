@@ -5,7 +5,7 @@ import { checkLoginRateLimit, clearLoginRateLimit } from '@/lib/login-rate-limit
 
 const loginSchema = z.object({
   email: z.string().trim().email().max(254),
-  password: z.string().min(1).max(128),
+  password: z.string().min(12).max(128),
 });
 
 export async function POST(request: Request) {
@@ -24,7 +24,18 @@ export async function POST(request: Request) {
       acceptHeader.includes('text/html');
 
     if (contentType.includes('application/json')) {
-      rawBody = await request.json();
+      const rawText = await request.text();
+      if (rawText) {
+        try {
+          rawBody = JSON.parse(rawText);
+        } catch {
+          try {
+            rawBody = new URLSearchParams(rawText);
+          } catch {
+            rawBody = null;
+          }
+        }
+      }
     } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
       rawBody = await request.formData();
     } else {
@@ -41,12 +52,14 @@ export async function POST(request: Request) {
     const credentials = parseLoginCredentials(rawBody);
     const parsed = credentials ? loginSchema.safeParse(credentials) : null;
 
+    const redirectOrigin = request.headers.get('origin') ?? new URL(request.url).origin;
+
     const errorRedirect = (key: string) => {
       if (!isHtmlBrowserRequest) {
         return NextResponse.json({ error: key === 'missing_credentials' ? 'Email and password are required.' : 'Invalid credentials' }, { status: key === 'missing_credentials' ? 400 : 401 });
       }
 
-      const redirectUrl = new URL('/login', request.url);
+      const redirectUrl = new URL('/login', redirectOrigin);
       redirectUrl.searchParams.set('error', key);
       return NextResponse.redirect(redirectUrl, 303);
     };
@@ -70,7 +83,7 @@ export async function POST(request: Request) {
       await clearLoginRateLimit(request, normalizedEmail);
 
       if (isHtmlBrowserRequest) {
-        const response = NextResponse.redirect(new URL('/dashboard', request.url), 303);
+        const response = NextResponse.redirect(new URL('/dashboard', redirectOrigin), 303);
         setSessionCookie(response, signSession(demoUser));
         return response;
       }
@@ -94,7 +107,7 @@ export async function POST(request: Request) {
       await clearLoginRateLimit(request, normalizedEmail);
 
       if (isHtmlBrowserRequest) {
-        const response = NextResponse.redirect(new URL('/dashboard', request.url), 303);
+        const response = NextResponse.redirect(new URL('/dashboard', redirectOrigin), 303);
         setSessionCookie(response, signSession(user));
         return response;
       }

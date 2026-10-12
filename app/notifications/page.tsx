@@ -12,10 +12,10 @@ export default async function NotificationsPage({
   if (!user) redirect('/login');
 
   const query = searchParams ? await searchParams : {};
-  const notificationUser = user.id.startsWith('demo-')
+  const notificationUser = user.id.startsWith('demo-') && process.env.DATABASE_URL
     ? await prisma.user.findUnique({ where: { email: user.email }, select: { id: true } })
     : { id: user.id };
-  const notifications = notificationUser
+  const notifications = process.env.DATABASE_URL && notificationUser
     ? await prisma.notification.findMany({
         where: { userId: notificationUser.id },
         orderBy: [{ readAt: 'desc' }, { createdAt: 'desc' }],

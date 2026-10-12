@@ -28,7 +28,7 @@ function decodeBase64Url(value: string): ArrayBuffer | null {
 }
 
 async function verifyJwtPayload(token: string): Promise<{ role: string } | null> {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET?.trim() || (process.env.NODE_ENV !== 'production' ? 'watchflow-local-development-secret-at-least-32-bytes' : '');
   if (!secret || new TextEncoder().encode(secret).byteLength < 32) return null;
 
   const parts = token.split('.');
@@ -82,6 +82,10 @@ export async function middleware(request: NextRequest) {
     : 1024 * 1024;
   if (contentLength > maxBodySize) {
     return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+  }
+
+  if (request.method === 'POST' && request.nextUrl.pathname === '/api/auth/login') {
+    return NextResponse.next();
   }
 
   if (

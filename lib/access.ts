@@ -1,3 +1,24 @@
+export const AI_PERMISSION_KEYS = [
+  'ai.chat.use',
+  'ai.goals.approve',
+  'ai.kpi.view_team',
+  'ai.kpi.view_self',
+  'ai.tasks.manage',
+  'ai.audit.view',
+] as const;
+
+export const AI_ROLE_DEFAULTS = {
+  admin: AI_PERMISSION_KEYS,
+  manager: [
+    'ai.chat.use',
+    'ai.kpi.view_team',
+    'ai.kpi.view_self',
+    'ai.tasks.manage',
+    'ai.audit.view',
+  ],
+  sales: ['ai.chat.use', 'ai.kpi.view_self'],
+} as const;
+
 export const ROLE_PERMISSIONS = {
   admin: [
     'dashboard:read',
@@ -19,6 +40,7 @@ export const ROLE_PERMISSIONS = {
     'users:read',
     'users:write',
     'audit:read',
+    ...AI_ROLE_DEFAULTS.admin,
   ],
   manager: [
     'dashboard:read',
@@ -30,6 +52,7 @@ export const ROLE_PERMISSIONS = {
     'orders:write',
     'reports:read',
     'design:read',
+    ...AI_ROLE_DEFAULTS.manager,
   ],
   sales: [
     'dashboard:read',
@@ -38,6 +61,7 @@ export const ROLE_PERMISSIONS = {
     'orders:read',
     'orders:write',
     'design:read',
+    ...AI_ROLE_DEFAULTS.sales,
   ],
   designer: ['dashboard:read', 'design:read', 'design:write'],
   master: ['dashboard:read', 'production:read', 'production:write'],
@@ -71,6 +95,12 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'users:read': 'Просмотр сотрудников',
   'users:write': 'Управление сотрудниками',
   'audit:read': 'Просмотр истории и аудита',
+  'ai.chat.use': 'Использование AI-чата',
+  'ai.goals.approve': 'Утверждение целей AI',
+  'ai.kpi.view_team': 'Просмотр KPI команды',
+  'ai.kpi.view_self': 'Просмотр собственного KPI',
+  'ai.tasks.manage': 'Управление AI-задачами',
+  'ai.audit.view': 'Просмотр AI-аудита',
 };
 
 const SECTION_PERMISSIONS: Record<string, string[]> = {

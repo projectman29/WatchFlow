@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { readJsonResponseBody } from '@/lib/http';
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_credentials: 'Email and password are required.',
@@ -37,14 +38,23 @@ function LoginPageContent() {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({ email: nextEmail, password: nextPassword }),
       });
 
-      const data = await response.json();
+      const data = await readJsonResponseBody(response);
 
       if (!response.ok) {
-        throw new Error(data.error ?? 'Login failed.');
+        throw new Error(typeof data.error === 'string' ? data.error : 'Login failed.');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.location.assign('/dashboard');
+        return;
       }
 
       router.push('/dashboard');
@@ -108,14 +118,14 @@ function LoginPageContent() {
 
         <div className="mt-6 space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
           <p>Демо-аккаунты:</p>
-          <p>admin@watchflow.local / admin123</p>
-          <p>manager@watchflow.local / manager123</p>
-          <p>sales@watchflow.local / sales123</p>
-          <p>designer@watchflow.local / designer123</p>
-          <p>master@watchflow.local / master123</p>
-          <p>warehouse@watchflow.local / warehouse123</p>
-          <p>logistics@watchflow.local / logistics123</p>
-          <p>marketing@watchflow.local / marketing123</p>
+          <p>admin@watchflow.local / AdminPass123!</p>
+          <p>manager@watchflow.local / ManagerPass123!</p>
+          <p>sales@watchflow.local / SalesPass123!</p>
+          <p>designer@watchflow.local / DesignerPass123!</p>
+          <p>master@watchflow.local / MasterPass123!</p>
+          <p>warehouse@watchflow.local / WarehousePass123!</p>
+          <p>logistics@watchflow.local / LogisticsPass123!</p>
+          <p>marketing@watchflow.local / MarketingPass123!</p>
         </div>
       </div>
     </main>

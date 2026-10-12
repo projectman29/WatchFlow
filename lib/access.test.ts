@@ -28,6 +28,20 @@ describe('RBAC access rules', () => {
     expect(ROLE_PERMISSIONS.designer).toContain('design:read');
   });
 
+  it('grants AI permissions by role without exposing team data to sales', () => {
+    expect(ROLE_PERMISSIONS.admin).toContain('ai.goals.approve');
+    expect(ROLE_PERMISSIONS.manager).toEqual(expect.arrayContaining([
+      'ai.chat.use',
+      'ai.kpi.view_team',
+      'ai.kpi.view_self',
+      'ai.tasks.manage',
+      'ai.audit.view',
+    ]));
+    expect(ROLE_PERMISSIONS.sales).toEqual(expect.arrayContaining(['ai.chat.use', 'ai.kpi.view_self']));
+    expect(hasPermission({ role: 'sales', permissions: [...ROLE_PERMISSIONS.sales] }, 'ai.kpi.view_team')).toBe(false);
+    expect(hasPermission({ role: 'designer', permissions: [...ROLE_PERMISSIONS.designer] }, 'ai.chat.use')).toBe(false);
+  });
+
   it('allows sales and manager roles to access their standard sections only', () => {
     expect(canAccessSection('manager', 'leads')).toBe(true);
     expect(canAccessSection('manager', 'crm')).toBe(true);

@@ -5,6 +5,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { prisma } from './prisma';
 
 export const SESSION_COOKIE = 'watchflow_session';
+export const DEV_JWT_SECRET_FALLBACK = 'watchflow-local-development-secret-at-least-32-bytes';
 
 export type SessionUser = {
   id: string;
@@ -19,11 +20,17 @@ export function isEmployeeAccountActive(employee?: { isActive: boolean } | null)
 }
 
 export function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
-    throw new Error('JWT_SECRET must be configured with at least 32 bytes.');
+  const configuredSecret = process.env.JWT_SECRET?.trim();
+
+  if (configuredSecret && Buffer.byteLength(configuredSecret, 'utf8') >= 32) {
+    return configuredSecret;
   }
-  return secret;
+
+  if (process.env.NODE_ENV !== 'production') {
+    return DEV_JWT_SECRET_FALLBACK;
+  }
+
+  throw new Error('JWT_SECRET must be configured with at least 32 bytes.');
 }
 
 export function parseLoginCredentials(input: unknown): { email: string; password: string } | null {
@@ -70,14 +77,14 @@ export function authenticateDemoAdmin(email: string, password: string): SessionU
   const normalizedEmail = email.trim().toLowerCase();
 
   const demoUsers: Record<string, { password: string; name: string; role: string }> = {
-    'admin@watchflow.local': { password: 'admin123', name: 'Super Admin', role: 'admin' },
-    'manager@watchflow.local': { password: 'manager123', name: 'Марина Соколова', role: 'manager' },
-    'sales@watchflow.local': { password: 'sales123', name: 'Иван Петров', role: 'sales' },
-    'designer@watchflow.local': { password: 'designer123', name: 'Ольга Дизайнер', role: 'designer' },
-    'master@watchflow.local': { password: 'master123', name: 'Игорь Мастер', role: 'master' },
-    'warehouse@watchflow.local': { password: 'warehouse123', name: 'Сергей Склад', role: 'warehouse' },
-    'logistics@watchflow.local': { password: 'logistics123', name: 'Алина Логистика', role: 'logistics' },
-    'marketing@watchflow.local': { password: 'marketing123', name: 'Анна Маркетинг', role: 'marketing' },
+    'admin@watchflow.local': { password: 'AdminPass123!', name: 'Super Admin', role: 'admin' },
+    'manager@watchflow.local': { password: 'ManagerPass123!', name: 'Марина Соколова', role: 'manager' },
+    'sales@watchflow.local': { password: 'SalesPass123!', name: 'Иван Петров', role: 'sales' },
+    'designer@watchflow.local': { password: 'DesignerPass123!', name: 'Ольга Дизайнер', role: 'designer' },
+    'master@watchflow.local': { password: 'MasterPass123!', name: 'Игорь Мастер', role: 'master' },
+    'warehouse@watchflow.local': { password: 'WarehousePass123!', name: 'Сергей Склад', role: 'warehouse' },
+    'logistics@watchflow.local': { password: 'LogisticsPass123!', name: 'Алина Логистика', role: 'logistics' },
+    'marketing@watchflow.local': { password: 'MarketingPass123!', name: 'Анна Маркетинг', role: 'marketing' },
   };
 
   const user = demoUsers[normalizedEmail];
@@ -166,12 +173,12 @@ export async function getCurrentUserFromCookies(): Promise<SessionUser | null> {
     return null;
   }
 
-  if (!process.env.DATABASE_URL) {
-    return null;
-  }
-
   if (sessionUser.id.startsWith('demo-')) {
     return sessionUser;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return null;
   }
 
   try {
